@@ -5,6 +5,7 @@ import { File, Upload, Trash2, Eye, Download, FileText } from "lucide-react";
 import { motion } from 'framer-motion';
 import { ToastContainer, toast } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
+import { useNavigate } from "react-router-dom";
 
 const FileManager = () => {
   const { roomId } = useParams();
@@ -13,6 +14,7 @@ const FileManager = () => {
   const [file, setFile] = useState(null);
   const [fileName, setFileName] = useState("");
   const [uploadMessage, setUploadMessage] = useState("");
+  const navigate = useNavigate();
 
   const handleViewFile = async (fileId) => {
     try {
@@ -151,7 +153,14 @@ const FileManager = () => {
   return (
     <div className="bg-gradient-to-br from-[#030718] via-[#0A1428] to-[#0F2E6B] min-h-screen p-6">
       <ToastContainer position="top-right" theme="dark" />
-      
+      <div className="mb-4">
+        <button
+          onClick={() => navigate(`/room/${roomId}`)}
+          className="flex items-center px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition"
+        >
+          ← Back to Chat
+        </button>
+      </div>
       <motion.div 
         initial={{ opacity: 0, y: -20 }}
         animate={{ opacity: 1, y: 0 }}
