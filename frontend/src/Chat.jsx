@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useRef } from "react";
 import { io } from "socket.io-client";
 import { useParams, useNavigate } from "react-router-dom";
-import { Camera, Mic, MicOff, Monitor, Phone, PhoneOff, Video, VideoOff, LogOut, Users } from "lucide-react";
+import { Camera, Mic, MicOff, Monitor, Phone, PhoneOff, Video, VideoOff, LogOut, Users, Upload } from "lucide-react";
 import { API_ENDPOINTS, SOCKET_URL } from "./lib/utils";
 import { ToastContainer, toast } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
@@ -455,6 +455,14 @@ const Chat = () => {
                 End Call
               </button>
             )}
+
+            <button
+              onClick={() => navigate(`/room/${roomId}/files`)}
+              className="px-4 py-2 rounded-lg text-sm font-medium bg-gradient-to-r from-purple-500 to-purple-600 text-white shadow-lg hover:shadow-purple-500/30 transition-all duration-300 flex items-center"
+            >
+              <Upload className="w-4 h-4 mr-2" />
+              Files
+            </button>
             
             <button
               onClick={leaveRoom}

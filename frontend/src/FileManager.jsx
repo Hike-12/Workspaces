@@ -1,13 +1,14 @@
 import React, { useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
-import { DJANGO_BASE_URL } from "@/lib/utils";
+import { API_ENDPOINTS } from "./lib/utils";
 import { File, Upload, Trash2, Eye, Download, FileText } from "lucide-react";
 import { motion } from 'framer-motion';
 import { ToastContainer, toast } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 
 const FileManager = () => {
-  const { teamId } = useParams();
+  const { roomId } = useParams();
+  const userName = localStorage.getItem("userName");
   const [files, setFiles] = useState([]);
   const [file, setFile] = useState(null);
   const [fileName, setFileName] = useState("");
@@ -15,11 +16,8 @@ const FileManager = () => {
 
   const handleViewFile = async (fileId) => {
     try {
-      const response = await fetch(`${DJANGO_BASE_URL}/api/files/${fileId}/view/`, {
+      const response = await fetch(API_ENDPOINTS.VIEW_FILE(fileId), {
         method: "GET",
-        headers: {
-          Authorization: `Token ${localStorage.getItem("authToken")}`,
-        },
       });
   
       if (!response.ok) throw new Error("Failed to fetch file for viewing");
@@ -39,11 +37,8 @@ const FileManager = () => {
   useEffect(() => {
     const fetchFiles = async () => {
       try {
-        const response = await fetch(`${DJANGO_BASE_URL}/api/teams/${teamId}/files/`, {
+        const response = await fetch(API_ENDPOINTS.GET_FILES(roomId), {
           method: "GET",
-          headers: {
-            Authorization: `Token ${localStorage.getItem("authToken")}`,
-          },
         });
 
         if (!response.ok) throw new Error("Failed to fetch files");
@@ -57,7 +52,7 @@ const FileManager = () => {
     };
 
     fetchFiles();
-  }, [teamId]);
+  }, [roomId]);
 
   const handleFileChange = (e) => {
     const selectedFile = e.target.files[0];
@@ -77,13 +72,11 @@ const FileManager = () => {
     const formData = new FormData();
     formData.append("file", file);
     formData.append("name", fileName);
+    formData.append("userName", userName);
 
     try {
-      const response = await fetch(`${DJANGO_BASE_URL}/api/teams/${teamId}/files/upload/`, {
+      const response = await fetch(API_ENDPOINTS.UPLOAD_FILE(roomId), {
         method: "POST",
-        headers: {
-          Authorization: `Token ${localStorage.getItem("authToken")}`,
-        },
         body: formData,
       });
 
@@ -91,7 +84,12 @@ const FileManager = () => {
 
       const data = await response.json();
       setUploadMessage(data.message);
-      setFiles((prev) => [...prev, { id: data.file_id, name: fileName, file_url: file.name }]);
+      
+      // Refresh files list
+      const filesResponse = await fetch(API_ENDPOINTS.GET_FILES(roomId));
+      const filesData = await filesResponse.json();
+      setFiles(filesData.files || []);
+      
       setFile(null);
       setFileName("");
       toast.success("File uploaded successfully!");
@@ -104,10 +102,10 @@ const FileManager = () => {
 
   const handleDeleteFile = async (fileId) => {
     try {
-      const response = await fetch(`${DJANGO_BASE_URL}/api/files/${fileId}/delete/`, {
+      const response = await fetch(API_ENDPOINTS.DELETE_FILE(fileId), {
         method: "POST",
         headers: {
-          Authorization: `Token ${localStorage.getItem("authToken")}`,
+          "Content-Type": "application/json",
         },
       });
 
@@ -171,7 +169,7 @@ const FileManager = () => {
             File Manager
           </h1>
           <p className="text-blue-100/70 mt-2">
-            Upload, view, and manage your team's files
+            Upload, view, and manage room files
           </p>
         </motion.div>
 
@@ -238,7 +236,7 @@ const FileManager = () => {
         >
           <h2 className="text-xl font-semibold text-white mb-6 flex items-center">
             <FileText className="mr-2 h-5 w-5 text-blue-400" />
-            Team Files
+            Room Files
           </h2>
           
           {files.length === 0 ? (
@@ -267,7 +265,7 @@ const FileManager = () => {
                     <div>
                       <h3 className="font-bold text-white">{file.name}</h3>
                       <p className="text-sm text-blue-100/70">
-                        Uploaded by: {file.uploaded_by || 'Team Member'} • {formatDate(file.uploaded_at || new Date())}
+                        Uploaded by: {file.uploaded_by || 'User'} • {formatDate(file.uploaded_at || new Date())}
                       </p>
                     </div>
                     

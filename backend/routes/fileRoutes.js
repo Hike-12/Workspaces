@@ -3,7 +3,7 @@ const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
 const File = require('../models/File');
-const Room = require('../models/Room');
+const Room = require('../models/ChatRoom');
 const router = express.Router();
 
 // Configure multer for file uploads

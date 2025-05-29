@@ -5,7 +5,7 @@ const cors = require('cors');
 const mongoose = require('mongoose');
 require('dotenv').config();
 
-const roomRoutes = require('./routes/roomRoutes');
+const roomRoutes = require('./routes/chatRoomRoutes');
 const fileRoutes = require('./routes/fileRoutes');
 const messageRoutes = require('./routes/messageRoutes');
 
