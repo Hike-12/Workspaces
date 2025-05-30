@@ -587,6 +587,40 @@ const handleICECandidate = async ({ candidate, from }) => {
               borderColor: COLORS.border,
             }}
           >
+            {/* Video Controls */}
+              <div className="flex justify-center space-x-4 sm:space-x-6 m-6">
+                <button
+                  onClick={toggleMic}
+                  className="p-3 sm:p-4 rounded-full shadow-lg transition-all duration-200 hover:scale-110"
+                  style={{
+                    background: isMicEnabled ? COLORS.accent : "#E74C3C",
+                    color: COLORS.textLight,
+                  }}
+                >
+                  {isMicEnabled ? <Mic className="w-5 h-5" /> : <MicOff className="w-5 h-5" />}
+                </button>
+                <button
+                  onClick={toggleCamera}
+                  className="p-3 sm:p-4 rounded-full shadow-lg transition-all duration-200 hover:scale-110"
+                  style={{
+                    background: isCameraEnabled ? COLORS.accent : "#E74C3C",
+                    color: COLORS.textLight,
+                  }}
+                >
+                  {isCameraEnabled ? <Camera className="w-5 h-5" /> : <VideoOff className="w-5 h-5" />}
+                </button>
+                <button
+                  onClick={toggleScreenShare}
+                  className="p-3 sm:p-4 rounded-full shadow-lg transition-all duration-200 hover:scale-110 border"
+                  style={{
+                    background: isScreenSharing ? COLORS.accent2 : COLORS.accent,
+                    color: isScreenSharing ? COLORS.accent : COLORS.textLight,
+                    border: `1px solid ${COLORS.accent}`,
+                  }}
+                >
+                  <Monitor className="w-5 h-5" />
+                </button>
+              </div>
             <div className="h-full flex flex-col">
               <div className="flex-1 flex gap-4 sm:gap-6 flex-wrap justify-center content-start">
                 {/* Local Video */}
@@ -638,40 +672,7 @@ const handleICECandidate = async ({ candidate, from }) => {
                   </div>
                 ))}
               </div>
-              {/* Video Controls */}
-              <div className="flex justify-center space-x-4 sm:space-x-6 mt-6">
-                <button
-                  onClick={toggleMic}
-                  className="p-3 sm:p-4 rounded-full shadow-lg transition-all duration-200 hover:scale-110"
-                  style={{
-                    background: isMicEnabled ? COLORS.accent : "#E74C3C",
-                    color: COLORS.textLight,
-                  }}
-                >
-                  {isMicEnabled ? <Mic className="w-5 h-5" /> : <MicOff className="w-5 h-5" />}
-                </button>
-                <button
-                  onClick={toggleCamera}
-                  className="p-3 sm:p-4 rounded-full shadow-lg transition-all duration-200 hover:scale-110"
-                  style={{
-                    background: isCameraEnabled ? COLORS.accent : "#E74C3C",
-                    color: COLORS.textLight,
-                  }}
-                >
-                  {isCameraEnabled ? <Camera className="w-5 h-5" /> : <VideoOff className="w-5 h-5" />}
-                </button>
-                <button
-                  onClick={toggleScreenShare}
-                  className="p-3 sm:p-4 rounded-full shadow-lg transition-all duration-200 hover:scale-110 border"
-                  style={{
-                    background: isScreenSharing ? COLORS.accent2 : COLORS.accent,
-                    color: isScreenSharing ? COLORS.accent : COLORS.textLight,
-                    border: `1px solid ${COLORS.accent}`,
-                  }}
-                >
-                  <Monitor className="w-5 h-5" />
-                </button>
-              </div>
+              
             </div>
           </div>
         )}
