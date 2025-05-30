@@ -7,13 +7,15 @@ import { ToastContainer, toast } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
 
 const COLORS = {
-  bg: "#F7FAFC",
-  card: "#FFFFFF",
-  border: "#E5E7EB",
-  accent: "#03346E",
-  accent2: "#6EACDA",
-  text: "#021526",
-  muted: "#6B7280",
+  bg: "#0C1844",         // main background (navy)
+  card: "#FFF5E1",       // card/panel (cream)
+  border: "#0C1844",     // border (navy)
+  accent: "#0C1844",     // primary accent (navy)
+  accent2: "#FFF5E1",    // secondary accent (cream)
+  text: "#0C1844",       // main text (navy on cream)
+  textLight: "#FFF5E1",  // light text (cream on navy)
+  muted: "#0C1844",      // muted text (navy)
+  myMessage: "#1a3d72",  // my messages background (lighter navy)
 };
 
 const Chat = () => {
@@ -464,29 +466,29 @@ const Chat = () => {
         background: COLORS.bg,
       }}
     >
-      <ToastContainer position="top-right" theme="light" />
+      <ToastContainer position="top-right" theme="dark" />
       {/* Header */}
       <div
-        className="py-4 px-6 border-b"
+        className="py-4 px-4 sm:px-6 shadow-lg"
         style={{
           background: COLORS.card,
-          borderBottomColor: COLORS.border,
+          borderBottom: `2px solid ${COLORS.border}`,
         }}
       >
         <div className="container mx-auto flex items-center justify-between">
           <div className="flex items-center">
             <div
-              className="h-10 w-10 rounded-lg flex items-center justify-center border"
+              className="h-12 w-12 rounded-xl flex items-center justify-center shadow-md"
               style={{
-                background: COLORS.card,
-                borderColor: COLORS.border,
+                background: COLORS.bg,
+                border: `2px solid ${COLORS.border}`,
               }}
             >
-              <Video className="h-6 w-6" style={{ color: COLORS.accent }} />
+              <Video className="h-6 w-6" style={{ color: COLORS.accent2 }} />
             </div>
-            <div className="ml-3">
+            <div className="ml-4">
               <h1
-                className="text-xl font-bold"
+                className="text-xl sm:text-2xl font-bold"
                 style={{
                   color: COLORS.accent,
                   letterSpacing: "-0.01em",
@@ -499,60 +501,78 @@ const Chat = () => {
               </p>
             </div>
           </div>
-          <div className="flex items-center space-x-2">
+          <div className="flex items-center space-x-2 sm:space-x-3">
             {!isVideoCallActive ? (
               <button
                 onClick={startVideoCall}
-                className="px-4 py-2 rounded-lg text-sm font-medium bg-[#03346E] text-white hover:bg-[#021526] transition-all"
+                className="px-3 sm:px-4 py-2 rounded-lg text-sm font-semibold shadow-md hover:shadow-lg transition-all duration-200 flex items-center"
+                style={{
+                  background: COLORS.accent,
+                  color: COLORS.textLight,
+                }}
               >
-                <Phone className="w-4 h-4 mr-2" />
-                Start Call
+                <Phone className="w-4 h-4 mr-1 sm:mr-2" />
+                <span className="hidden sm:inline">Start Call</span>
+                <span className="sm:hidden">Call</span>
               </button>
             ) : (
               <button
                 onClick={endVideoCall}
-                className="px-4 py-2 rounded-lg text-sm font-medium bg-red-500 text-white hover:bg-red-700 transition-all"
+                className="px-3 sm:px-4 py-2 rounded-lg text-sm font-semibold shadow-md hover:shadow-lg transition-all duration-200 flex items-center"
+                style={{
+                  background: "#E74C3C",
+                  color: COLORS.textLight,
+                }}
               >
-                <PhoneOff className="w-4 h-4 mr-2" />
-                End Call
+                <PhoneOff className="w-4 h-4 mr-1 sm:mr-2" />
+                <span className="hidden sm:inline">End Call</span>
+                <span className="sm:hidden">End</span>
               </button>
             )}
             <button
               onClick={() => navigate(`/room/${roomId}/files`)}
-              className="px-4 py-2 rounded-lg text-sm font-medium bg-[#03346E] text-white hover:bg-[#021526] transition-all"
+              className="px-3 sm:px-4 py-2 rounded-lg text-sm font-semibold shadow-md hover:shadow-lg transition-all duration-200 flex items-center"
+              style={{
+                background: COLORS.accent,
+                color: COLORS.textLight,
+              }}
             >
-              <Upload className="w-4 h-4 mr-2" />
-              Files
+              <Upload className="w-4 h-4 mr-1 sm:mr-2" />
+              <span className="hidden sm:inline">Files</span>
             </button>
             <button
               onClick={leaveRoom}
-              className="px-4 py-2 rounded-lg text-sm font-medium bg-gray-200 text-[#03346E] hover:bg-gray-300 transition-all"
+              className="px-3 sm:px-4 py-2 rounded-lg text-sm font-semibold shadow-md hover:shadow-lg transition-all duration-200 flex items-center border"
+              style={{
+                background: "transparent",
+                color: COLORS.accent,
+                border: `1px solid ${COLORS.border}`,
+              }}
             >
-              <LogOut className="w-4 h-4 mr-2" />
-              Leave
+              <LogOut className="w-4 h-4 mr-1 sm:mr-2" />
+              <span className="hidden sm:inline">Leave</span>
             </button>
           </div>
         </div>
       </div>
-      <div className="flex-1 flex">
+      <div className="flex-1 flex flex-col lg:flex-row">
         {/* Video Call Area */}
         {isVideoCallActive && (
           <div
-            className="w-2/3 p-8 border-r"
+            className="w-full lg:w-2/3 p-4 sm:p-6 border-b-2 lg:border-b-0 lg:border-r-2"
             style={{
               background: COLORS.bg,
-              borderRightColor: COLORS.border,
-              borderRightWidth: 1,
+              borderColor: COLORS.border,
             }}
           >
             <div className="h-full flex flex-col">
-              <div className="flex-1 flex gap-5 flex-wrap justify-center content-start">
+              <div className="flex-1 flex gap-4 sm:gap-6 flex-wrap justify-center content-start">
                 {/* Local Video */}
                 <div
-                  className="relative w-64 h-40 rounded-lg overflow-hidden border shadow-sm"
+                  className="relative w-48 h-32 sm:w-64 sm:h-40 rounded-xl overflow-hidden shadow-lg transition-transform hover:scale-105 cursor-pointer"
                   style={{
                     background: COLORS.card,
-                    borderColor: COLORS.border,
+                    border: `2px solid ${COLORS.border}`,
                   }}
                 >
                   <video
@@ -560,11 +580,12 @@ const Chat = () => {
                     autoPlay
                     playsInline
                     muted
-                    className="w-full h-full object-cover cursor-pointer"
+                    className="w-full h-full object-cover"
                     onClick={() => handleVideoClick(localVideoRef.current)}
                   />
-                  <div className="absolute bottom-0 left-0 right-0 bg-white/70 p-1">
-                    <span className="text-xs font-medium text-[#03346E]">
+                  <div className="absolute bottom-0 left-0 right-0"
+                  >
+                    <span className="text-xs font-semibold" style={{ color: COLORS.accent }}>
                       You {isScreenSharing ? '(Screen)' : ''}
                     </span>
                   </div>
@@ -573,21 +594,26 @@ const Chat = () => {
                 {remoteUserIds.map((remoteUserId, idx) => (
                   <div
                     key={remoteUserId || idx}
-                    className="relative w-64 h-40 rounded-lg overflow-hidden border shadow-sm"
+                    className="relative w-48 h-32 sm:w-64 sm:h-40 rounded-xl overflow-hidden shadow-lg transition-transform hover:scale-105 cursor-pointer"
                     style={{
                       background: COLORS.card,
-                      borderColor: COLORS.border,
+                      border: `2px solid ${COLORS.border}`,
                     }}
                   >
                     <video
                       ref={el => remoteVideoRefs.current[remoteUserId || idx] = el}
                       autoPlay
                       playsInline
-                      className="w-full h-full object-cover cursor-pointer"
+                      className="w-full h-full object-cover"
                       onClick={() => handleVideoClick(remoteVideoRefs.current[remoteUserId || idx])}
                     />
-                    <div className="absolute bottom-0 left-0 right-0 bg-white/70 p-1">
-                      <span className="text-xs font-medium text-[#03346E]">
+                    <div className="absolute bottom-0 left-0 right-0"
+                      style={{
+                        background: "rgba(255, 245, 225, 0.95)",
+                        padding: "0.5rem",
+                      }}
+                    >
+                      <span className="text-xs font-semibold" style={{ color: COLORS.accent }}>
                         {remoteUsers[remoteUserId] || "User"}
                       </span>
                     </div>
@@ -595,34 +621,35 @@ const Chat = () => {
                 ))}
               </div>
               {/* Video Controls */}
-              <div className="flex justify-center space-x-4 mt-6">
+              <div className="flex justify-center space-x-4 sm:space-x-6 mt-6">
                 <button
                   onClick={toggleMic}
-                  className={`p-3 rounded-full border transition-all ${
-                    isMicEnabled
-                      ? "bg-[#03346E] text-white border-[#03346E]"
-                      : "bg-red-500 text-white border-red-500"
-                  }`}
+                  className="p-3 sm:p-4 rounded-full shadow-lg transition-all duration-200 hover:scale-110"
+                  style={{
+                    background: isMicEnabled ? COLORS.accent : "#E74C3C",
+                    color: COLORS.textLight,
+                  }}
                 >
                   {isMicEnabled ? <Mic className="w-5 h-5" /> : <MicOff className="w-5 h-5" />}
                 </button>
                 <button
                   onClick={toggleCamera}
-                  className={`p-3 rounded-full border transition-all ${
-                    isCameraEnabled
-                      ? "bg-[#03346E] text-white border-[#03346E]"
-                      : "bg-red-500 text-white border-red-500"
-                  }`}
+                  className="p-3 sm:p-4 rounded-full shadow-lg transition-all duration-200 hover:scale-110"
+                  style={{
+                    background: isCameraEnabled ? COLORS.accent : "#E74C3C",
+                    color: COLORS.textLight,
+                  }}
                 >
                   {isCameraEnabled ? <Camera className="w-5 h-5" /> : <VideoOff className="w-5 h-5" />}
                 </button>
                 <button
                   onClick={toggleScreenShare}
-                  className={`p-3 rounded-full border transition-all ${
-                    isScreenSharing
-                      ? "bg-green-500 text-white border-green-500"
-                      : "bg-gray-200 text-[#03346E] border-gray-200"
-                  }`}
+                  className="p-3 sm:p-4 rounded-full shadow-lg transition-all duration-200 hover:scale-110 border"
+                  style={{
+                    background: isScreenSharing ? COLORS.accent2 : COLORS.accent,
+                    color: isScreenSharing ? COLORS.accent : COLORS.textLight,
+                    border: `1px solid ${COLORS.accent}`,
+                  }}
                 >
                   <Monitor className="w-5 h-5" />
                 </button>
@@ -631,9 +658,13 @@ const Chat = () => {
           </div>
         )}
         {/* Chat Area */}
-        <div className={`${isVideoCallActive ? 'w-1/3' : 'w-full'} flex flex-col`}>
+        <div className={`${isVideoCallActive ? 'w-full lg:w-1/3' : 'w-full'} flex flex-col`}>
           {/* Messages */}
-          <div className="flex-1 p-6 overflow-y-auto">
+          <div className="flex-1 p-4 sm:p-6 overflow-y-auto"
+            style={{
+              background: COLORS.bg,
+            }}
+          >
             <div className="space-y-4">
               {messages.map((msg, index) => (
                 <div
@@ -641,21 +672,22 @@ const Chat = () => {
                   className={`flex ${msg.userId === userId ? 'justify-end' : 'justify-start'}`}
                 >
                   <div
-                    className={`max-w-xs lg:max-w-md px-4 py-2 rounded-lg border shadow-sm ${
-                      msg.userId === userId
-                        ? 'bg-[#03346E] text-white border-[#03346E]'
-                        : 'bg-white text-[#021526] border-[#E5E7EB]'
-                    }`}
+                    className={`max-w-xs sm:max-w-sm lg:max-w-md px-4 py-3 rounded-xl shadow-md`}
+                    style={{
+                      background: msg.userId === userId ? COLORS.myMessage : COLORS.card,
+                      color: msg.userId === userId ? COLORS.textLight : COLORS.text,
+                      border: `1px solid ${COLORS.border}`,
+                    }}
                   >
                     <div className="flex items-center justify-between mb-1">
-                      <span className="text-xs font-semibold opacity-80">
+                      <span className="text-xs font-semibold opacity-80" style={{ color: msg.userId === userId ? COLORS.accent2 : COLORS.accent }}>
                         {msg.userName || msg.sender}
                       </span>
-                      <span className="text-xs opacity-60">
+                      <span className="text-xs opacity-60" style={{ color: msg.userId === userId ? COLORS.accent2 : COLORS.muted }}>
                         {formatTime(msg.timestamp || msg.createdAt)}
                       </span>
                     </div>
-                    <p className="text-sm">{msg.content}</p>
+                    <p className="text-sm leading-relaxed">{msg.content}</p>
                   </div>
                 </div>
               ))}
@@ -664,24 +696,33 @@ const Chat = () => {
           </div>
           {/* Message Input */}
           <div
-            className="p-4 border-t"
+            className="p-4 sm:p-6 shadow-lg"
             style={{
-              borderTopColor: COLORS.border,
+              borderTop: `2px solid ${COLORS.border}`,
               background: COLORS.card,
             }}
           >
-            <div className="flex space-x-2">
+            <div className="flex space-x-3">
               <input
                 type="text"
                 value={message}
                 onChange={(e) => setMessage(e.target.value)}
                 onKeyPress={(e) => e.key === 'Enter' && sendMessage()}
-                className="flex-1 px-4 py-2 rounded-lg border bg-white text-[#021526] border-[#E5E7EB] focus:outline-none focus:ring-2 focus:ring-[#03346E] transition-all"
+                className="flex-1 px-4 py-3 rounded-lg border transition-all duration-200 focus:ring-2 focus:ring-blue-200"
+                style={{
+                  background: "rgba(12, 24, 68, 0.02)",
+                  color: COLORS.text,
+                  border: `1px solid rgba(12, 24, 68, 0.2)`,
+                }}
                 placeholder="Type a message..."
               />
               <button
                 onClick={sendMessage}
-                className="px-5 py-2 rounded-lg font-semibold bg-[#03346E] text-white hover:bg-[#021526] transition-all"
+                className="px-6 py-3 rounded-lg font-semibold shadow-md hover:shadow-lg transition-all duration-200"
+                style={{
+                  background: COLORS.accent,
+                  color: COLORS.textLight,
+                }}
               >
                 Send
               </button>
