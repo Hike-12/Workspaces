@@ -712,7 +712,7 @@ const createPeerConnection = async (remoteUserId) => {
                     className="w-full h-full object-cover"
                     onClick={() => handleVideoClick(localVideoRef.current)}
                   />
-                  <div className="absolute bottom-0 left-0 right-0"
+                  <div className="absolute bottom-0 left-0 right-0 p-3"
                   >
                     <span className="text-xs font-semibold" style={{ color: COLORS.accent }}>
                       You {isScreenSharing ? '(Screen)' : ''}
@@ -736,7 +736,7 @@ const createPeerConnection = async (remoteUserId) => {
                       className="w-full h-full object-cover"
                       onClick={() => handleVideoClick(remoteVideoRefs.current[remoteUserId])}
                     />
-                    <div className="absolute bottom-0 left-0 right-0"
+                    <div className="absolute bottom-0 left-0 right-0 p-3"
                     >
                       <span className="text-xs font-semibold" style={{ color: COLORS.accent }}>
                         {remoteUsers[remoteUserId] || remoteUserId}
