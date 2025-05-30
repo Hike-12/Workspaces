@@ -225,39 +225,78 @@ const Chat = () => {
   }, [roomId]);
 
   const startVideoCall = async () => {
-    try {
-      console.log("Starting video call with existing users:", remoteUserIds);
+  try {
+    console.log("Starting video call with existing users:", remoteUserIds);
+    
+    if (!localStreamRef.current) {
+      localStreamRef.current = await navigator.mediaDevices.getUserMedia({
+        video: true,
+        audio: true,
+      });
+    }
+
+    setIsVideoCallActive(true);
+    
+    // Set a ref to track video call state immediately
+    const videoCallActiveRef = { current: true };
+    
+    // Emit joinCall immediately after setting up local stream
+    socketRef.current.emit("joinCall", { roomId, userId, userName });
+    
+    // Handle offers that might come before state updates
+    const handleDelayedOffer = ({ offer, from }) => {
+      console.log("Handling delayed offer from:", from, "Video active:", videoCallActiveRef.current);
       
-      if (!localStreamRef.current) {
-        localStreamRef.current = await navigator.mediaDevices.getUserMedia({
-          video: true,
-          audio: true,
-        });
+      if (!videoCallActiveRef.current || !localStreamRef.current) {
+        console.log("Video call not active or no local stream, ignoring offer");
+        return;
       }
 
-      setIsVideoCallActive(true);
-      
-      // Wait a bit for state to update, then emit joinCall
-      setTimeout(() => {
-        socketRef.current.emit("joinCall", { roomId, userId, userName });
-        
-        // Create peer connections for all existing remote users
-        const validRemoteUsers = remoteUserIds.filter(id => id !== userId);
-        console.log("Creating connections for:", validRemoteUsers);
-        
-        validRemoteUsers.forEach((remoteUserId) => {
-          setTimeout(() => {
-            handleUserJoined(remoteUserId);
-          }, 200);
-        });
+      setTimeout(async () => {
+        try {
+          const peerConnection = await createPeerConnection(from);
+          if (peerConnection) {
+            await peerConnection.setRemoteDescription(new window.RTCSessionDescription(offer));
+            const answer = await peerConnection.createAnswer();
+            await peerConnection.setLocalDescription(answer);
+            console.log("Sending answer to:", from);
+            socketRef.current.emit("answer", { answer, to: from });
+          }
+        } catch (error) {
+          console.error("Error handling delayed offer:", error);
+          toast.error("Connection error");
+        }
       }, 100);
+    };
 
-      toast.success("Video call started successfully!");
-    } catch (error) {
-      console.error("Error starting video call:", error);
-      toast.error("Could not access camera/microphone. Please check permissions.");
-    }
-  };
+    // Temporarily override the offer handler for immediate processing
+    socketRef.current.off("offer");
+    socketRef.current.on("offer", handleDelayedOffer);
+    
+    // Restore normal offer handler after a delay
+    setTimeout(() => {
+      socketRef.current.off("offer");
+      socketRef.current.on("offer", handleOffer);
+    }, 2000);
+
+    // Create connections for existing users after a short delay
+    setTimeout(() => {
+      const validRemoteUsers = remoteUserIds.filter(id => id !== userId);
+      console.log("Creating connections for existing users:", validRemoteUsers);
+      
+      validRemoteUsers.forEach((remoteUserId) => {
+        setTimeout(() => {
+          handleUserJoined(remoteUserId);
+        }, 200);
+      });
+    }, 500);
+
+    toast.success("Video call started successfully!");
+  } catch (error) {
+    console.error("Error starting video call:", error);
+    toast.error("Could not access camera/microphone. Please check permissions.");
+  }
+};
 
   const endVideoCall = () => {
     Object.values(peerConnections.current).forEach(connection => connection.close());
@@ -307,8 +346,10 @@ const Chat = () => {
   };
 
   const handleOffer = async ({ offer, from }) => {
-    console.log("Received offer from:", from, "Video call active:", isVideoCallActive);
-    
+  console.log("Received offer from:", from, "Video call active:", isVideoCallActive);
+  
+  // Add a small delay to ensure state has updated
+  setTimeout(async () => {
     if (!isVideoCallActive || !localStreamRef.current) {
       console.log("Video call not active or no local stream, ignoring offer");
       return;
@@ -327,7 +368,8 @@ const Chat = () => {
       console.error("Error handling offer:", error);
       toast.error("Connection error");
     }
-  };
+  }, 100);
+};
 
   const handleAnswer = async ({ answer, from }) => {
     try {
