@@ -332,18 +332,56 @@ const handleUserJoined = async (remoteUserId) => {
 // 3) on OFFER:
 const handleOffer = async ({ offer, from }) => {
   if (!localStreamRef.current) return;
+
   const pc = createPeerConnection(from);
-  await pc.setRemoteDescription(new RTCSessionDescription(offer));
-  const answer = await pc.createAnswer();
-  await pc.setLocalDescription(answer);
-  socketRef.current.emit("answer", { answer, to: from });
+
+  // ignore duplicate offers
+  if (pc.remoteDescription) {
+    console.log("⏩ ignore duplicate offer from", from);
+    return;
+  }
+
+  try {
+    await pc.setRemoteDescription(new RTCSessionDescription(offer));
+    const answer = await pc.createAnswer();
+    await pc.setLocalDescription(answer);
+    socketRef.current.emit("answer", { answer, to: from });
+    console.log("✅ answered offer from", from);
+  } catch (err) {
+    console.error("❌ error handling offer:", err);
+    pc.close();
+    delete peerConnections.current[from];
+  }
 };
 
 // 4) on ANSWER:
 const handleAnswer = async ({ answer, from }) => {
   const pc = peerConnections.current[from];
-  if (!pc) return;
-  await pc.setRemoteDescription(new RTCSessionDescription(answer));
+  if (!pc) {
+    console.log("⏩ ignore answer, no pc for", from);
+    return;
+  }
+
+  // only proceed if *we* created an offer
+  if (
+    pc.localDescription?.type !== 'offer' ||
+    pc.signalingState !== 'have-local-offer'
+  ) {
+    console.log(
+      "⏩ ignore answer, wrong state:",
+      pc.signalingState,
+      "localDesc:",
+      pc.localDescription?.type
+    );
+    return;
+  }
+
+  try {
+    await pc.setRemoteDescription(new RTCSessionDescription(answer));
+    console.log("✅ remote-answer set for", from);
+  } catch (err) {
+    console.error("❌ failed to set remote answer:", err);
+  }
 };
 
 // 5) on ICE:
