@@ -6,6 +6,16 @@ import { API_ENDPOINTS, SOCKET_URL } from "./lib/utils";
 import { ToastContainer, toast } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
 
+const COLORS = {
+  bg: "#F7FAFC",
+  card: "#FFFFFF",
+  border: "#E5E7EB",
+  accent: "#03346E",
+  accent2: "#6EACDA",
+  text: "#021526",
+  muted: "#6B7280",
+};
+
 const Chat = () => {
   const { roomId } = useParams();
   const navigate = useNavigate();
@@ -417,31 +427,52 @@ const Chat = () => {
   };
 
   return (
-    <div className="bg-gradient-to-br from-[#030718] via-[#0A1428] to-[#0F2E6B] min-h-screen flex flex-col">
-      <ToastContainer position="top-right" theme="dark" />
-      
+    <div
+      className="min-h-screen flex flex-col"
+      style={{
+        background: COLORS.bg,
+      }}
+    >
+      <ToastContainer position="top-right" theme="light" />
       {/* Header */}
-      <div className="py-4 px-6 bg-[#030718]/90 backdrop-blur-lg shadow-lg">
+      <div
+        className="py-4 px-6 border-b"
+        style={{
+          background: COLORS.card,
+          borderBottomColor: COLORS.border,
+        }}
+      >
         <div className="container mx-auto flex items-center justify-between">
           <div className="flex items-center">
-            <div className="h-10 w-10 rounded-lg bg-gradient-to-br from-blue-400 via-blue-500 to-indigo-600 flex items-center justify-center shadow-lg">
-              <Video className="h-6 w-6 text-white" />
+            <div
+              className="h-10 w-10 rounded-lg flex items-center justify-center border"
+              style={{
+                background: COLORS.card,
+                borderColor: COLORS.border,
+              }}
+            >
+              <Video className="h-6 w-6" style={{ color: COLORS.accent }} />
             </div>
             <div className="ml-3">
-              <h1 className="text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-blue-200 to-indigo-100">
+              <h1
+                className="text-xl font-bold"
+                style={{
+                  color: COLORS.accent,
+                  letterSpacing: "-0.01em",
+                }}
+              >
                 {roomName || "Chat Room"}
               </h1>
-              <p className="text-sm text-blue-100/60">
+              <p className="text-sm" style={{ color: COLORS.muted }}>
                 {roomData?.participants?.length || 0} participants
               </p>
             </div>
           </div>
-          
-          <div className="flex items-center space-x-3">
+          <div className="flex items-center space-x-2">
             {!isVideoCallActive ? (
               <button
                 onClick={startVideoCall}
-                className="px-4 py-2 rounded-lg text-sm font-medium bg-gradient-to-r from-green-500 to-emerald-600 text-white shadow-lg hover:shadow-green-500/30 transition-all duration-300 flex items-center"
+                className="px-4 py-2 rounded-lg text-sm font-medium bg-[#03346E] text-white hover:bg-[#021526] transition-all"
               >
                 <Phone className="w-4 h-4 mr-2" />
                 Start Call
@@ -449,24 +480,22 @@ const Chat = () => {
             ) : (
               <button
                 onClick={endVideoCall}
-                className="px-4 py-2 rounded-lg text-sm font-medium bg-gradient-to-r from-red-500 to-rose-600 text-white shadow-lg hover:shadow-red-500/30 transition-all duration-300 flex items-center"
+                className="px-4 py-2 rounded-lg text-sm font-medium bg-red-500 text-white hover:bg-red-700 transition-all"
               >
                 <PhoneOff className="w-4 h-4 mr-2" />
                 End Call
               </button>
             )}
-
             <button
               onClick={() => navigate(`/room/${roomId}/files`)}
-              className="px-4 py-2 rounded-lg text-sm font-medium bg-gradient-to-r from-purple-500 to-purple-600 text-white shadow-lg hover:shadow-purple-500/30 transition-all duration-300 flex items-center"
+              className="px-4 py-2 rounded-lg text-sm font-medium bg-[#03346E] text-white hover:bg-[#021526] transition-all"
             >
               <Upload className="w-4 h-4 mr-2" />
               Files
             </button>
-            
             <button
               onClick={leaveRoom}
-              className="px-4 py-2 rounded-lg text-sm font-medium bg-gradient-to-r from-gray-500 to-gray-600 text-white shadow-lg hover:shadow-gray-500/30 transition-all duration-300 flex items-center"
+              className="px-4 py-2 rounded-lg text-sm font-medium bg-gray-200 text-[#03346E] hover:bg-gray-300 transition-all"
             >
               <LogOut className="w-4 h-4 mr-2" />
               Leave
@@ -474,91 +503,102 @@ const Chat = () => {
           </div>
         </div>
       </div>
-
       <div className="flex-1 flex">
         {/* Video Call Area */}
         {isVideoCallActive && (
-          <div className="w-2/3 bg-[#030718]/80 p-6 border-r border-blue-500/20">
+          <div
+            className="w-2/3 p-8 border-r"
+            style={{
+              background: COLORS.bg,
+              borderRightColor: COLORS.border,
+              borderRightWidth: 1,
+            }}
+          >
             <div className="h-full flex flex-col">
-              <div className="flex-1 flex gap-4 flex-wrap justify-center content-start">
+              <div className="flex-1 flex gap-5 flex-wrap justify-center content-start">
                 {/* Local Video */}
-                <div className="relative w-72 h-48 backdrop-blur-md bg-white/5 border border-blue-500/20 rounded-xl overflow-hidden hover:shadow-blue-500/20 hover:shadow-lg transition-all duration-300">
-                  <video 
-                    ref={localVideoRef} 
-                    autoPlay 
-                    playsInline 
-                    muted 
-                    className="w-full h-full object-cover"
-                    onClick={() => handleVideoClick(localVideoRef.current)} 
+                <div
+                  className="relative w-64 h-40 rounded-lg overflow-hidden border shadow-sm"
+                  style={{
+                    background: COLORS.card,
+                    borderColor: COLORS.border,
+                  }}
+                >
+                  <video
+                    ref={localVideoRef}
+                    autoPlay
+                    playsInline
+                    muted
+                    className="w-full h-full object-cover cursor-pointer"
+                    onClick={() => handleVideoClick(localVideoRef.current)}
                   />
-                  <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/70 to-transparent p-2">
-                    <span className="text-white text-sm font-medium">
+                  <div className="absolute bottom-0 left-0 right-0 bg-white/70 p-1">
+                    <span className="text-xs font-medium text-[#03346E]">
                       You {isScreenSharing ? '(Screen)' : ''}
                     </span>
                   </div>
                 </div>
-
                 {/* Remote Videos */}
                 {remoteUserIds.map((remoteUserId) => (
-                  <div 
+                  <div
                     key={remoteUserId}
-                    className="relative w-72 h-48 backdrop-blur-md bg-white/5 border border-blue-500/20 rounded-xl overflow-hidden hover:shadow-blue-500/20 hover:shadow-lg transition-all duration-300"
+                    className="relative w-64 h-40 rounded-lg overflow-hidden border shadow-sm"
+                    style={{
+                      background: COLORS.card,
+                      borderColor: COLORS.border,
+                    }}
                   >
                     <video
                       ref={el => remoteVideoRefs.current[remoteUserId] = el}
                       autoPlay
                       playsInline
-                      className="w-full h-full object-cover"
+                      className="w-full h-full object-cover cursor-pointer"
                       onClick={() => handleVideoClick(remoteVideoRefs.current[remoteUserId])}
                     />
-                    <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/70 to-transparent p-2">
-                      <span className="text-white text-sm font-medium">
+                    <div className="absolute bottom-0 left-0 right-0 bg-white/70 p-1">
+                      <span className="text-xs font-medium text-[#03346E]">
                         {remoteUserId}
                       </span>
                     </div>
                   </div>
                 ))}
               </div>
-              
               {/* Video Controls */}
               <div className="flex justify-center space-x-4 mt-6">
                 <button
                   onClick={toggleMic}
-                  className={`p-3 rounded-full transition-all ${
-                    isMicEnabled 
-                      ? "bg-blue-500 hover:bg-blue-600" 
-                      : "bg-red-500 hover:bg-red-600"
+                  className={`p-3 rounded-full border transition-all ${
+                    isMicEnabled
+                      ? "bg-[#03346E] text-white border-[#03346E]"
+                      : "bg-red-500 text-white border-red-500"
                   }`}
                 >
-                  {isMicEnabled ? <Mic className="w-5 h-5 text-white" /> : <MicOff className="w-5 h-5 text-white" />}
+                  {isMicEnabled ? <Mic className="w-5 h-5" /> : <MicOff className="w-5 h-5" />}
                 </button>
-                
                 <button
                   onClick={toggleCamera}
-                  className={`p-3 rounded-full transition-all ${
-                    isCameraEnabled 
-                      ? "bg-blue-500 hover:bg-blue-600" 
-                      : "bg-red-500 hover:bg-red-600"
+                  className={`p-3 rounded-full border transition-all ${
+                    isCameraEnabled
+                      ? "bg-[#03346E] text-white border-[#03346E]"
+                      : "bg-red-500 text-white border-red-500"
                   }`}
                 >
-                  {isCameraEnabled ? <Camera className="w-5 h-5 text-white" /> : <VideoOff className="w-5 h-5 text-white" />}
+                  {isCameraEnabled ? <Camera className="w-5 h-5" /> : <VideoOff className="w-5 h-5" />}
                 </button>
-                
                 <button
                   onClick={toggleScreenShare}
-                  className={`p-3 rounded-full transition-all ${
-                    isScreenSharing 
-                      ? "bg-green-500 hover:bg-green-600" 
-                      : "bg-gray-500 hover:bg-gray-600"
+                  className={`p-3 rounded-full border transition-all ${
+                    isScreenSharing
+                      ? "bg-green-500 text-white border-green-500"
+                      : "bg-gray-200 text-[#03346E] border-gray-200"
                   }`}
                 >
-                  <Monitor className="w-5 h-5 text-white" />
+                  <Monitor className="w-5 h-5" />
                 </button>
               </div>
             </div>
           </div>
         )}
-
         {/* Chat Area */}
         <div className={`${isVideoCallActive ? 'w-1/3' : 'w-full'} flex flex-col`}>
           {/* Messages */}
@@ -570,17 +610,17 @@ const Chat = () => {
                   className={`flex ${msg.sender === userName ? 'justify-end' : 'justify-start'}`}
                 >
                   <div
-                    className={`max-w-xs lg:max-w-md px-4 py-2 rounded-lg ${
+                    className={`max-w-xs lg:max-w-md px-4 py-2 rounded-lg border shadow-sm ${
                       msg.sender === userName
-                        ? 'bg-blue-500 text-white'
-                        : 'bg-white/10 text-blue-100'
+                        ? 'bg-[#03346E] text-white border-[#03346E]'
+                        : 'bg-white text-[#021526] border-[#E5E7EB]'
                     }`}
                   >
                     <div className="flex items-center justify-between mb-1">
-                      <span className="text-xs font-medium opacity-75">
+                      <span className="text-xs font-semibold opacity-80">
                         {msg.userName || msg.sender}
                       </span>
-                      <span className="text-xs opacity-50">
+                      <span className="text-xs opacity-60">
                         {formatTime(msg.timestamp || msg.createdAt)}
                       </span>
                     </div>
@@ -591,21 +631,26 @@ const Chat = () => {
               <div ref={messagesEndRef} />
             </div>
           </div>
-
           {/* Message Input */}
-          <div className="p-6 border-t border-blue-500/20">
+          <div
+            className="p-4 border-t"
+            style={{
+              borderTopColor: COLORS.border,
+              background: COLORS.card,
+            }}
+          >
             <div className="flex space-x-2">
               <input
                 type="text"
                 value={message}
                 onChange={(e) => setMessage(e.target.value)}
                 onKeyPress={(e) => e.key === 'Enter' && sendMessage()}
-                className="flex-1 px-4 py-2 rounded-lg bg-white/10 border border-blue-500/30 text-blue-100 placeholder-blue-100/50 focus:outline-none focus:ring-2 focus:ring-blue-500/50"
+                className="flex-1 px-4 py-2 rounded-lg border bg-white text-[#021526] border-[#E5E7EB] focus:outline-none focus:ring-2 focus:ring-[#03346E] transition-all"
                 placeholder="Type a message..."
               />
               <button
                 onClick={sendMessage}
-                className="px-6 py-2 bg-gradient-to-r from-blue-500 to-indigo-500 text-white rounded-lg font-medium hover:shadow-blue-500/50 transition-all duration-300"
+                className="px-5 py-2 rounded-lg font-semibold bg-[#03346E] text-white hover:bg-[#021526] transition-all"
               >
                 Send
               </button>
@@ -613,7 +658,6 @@ const Chat = () => {
           </div>
         </div>
       </div>
-
       {/* Full Screen Video Modal */}
       {isFullScreen && (
         <div className="fixed inset-0 bg-black bg-opacity-90 flex items-center justify-center z-50" onClick={closeFullScreen}>

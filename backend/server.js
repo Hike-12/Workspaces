@@ -4,6 +4,7 @@ const socketIo = require('socket.io');
 const cors = require('cors');
 const mongoose = require('mongoose');
 require('dotenv').config();
+const connectDB = require('./config/db');
 
 const roomRoutes = require('./routes/chatRoomRoutes');
 const fileRoutes = require('./routes/fileRoutes');
@@ -24,14 +25,7 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
 // Connect to MongoDB
-mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/chatrooms', {
-  useNewUrlParser: true,
-  useUnifiedTopology: true,
-}).then(() => {
-  console.log('Connected to MongoDB');
-}).catch(err => {
-  console.error('MongoDB connection error:', err);
-});
+connectDB();
 
 // Routes
 app.use('/api/rooms', roomRoutes);

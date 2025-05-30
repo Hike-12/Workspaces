@@ -1,11 +1,21 @@
 import React, { useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
 import { API_ENDPOINTS } from "./lib/utils";
-import { File, Upload, Trash2, Eye, Download, FileText } from "lucide-react";
+import { File, Upload, Trash2, Eye, FileText } from "lucide-react";
 import { motion } from 'framer-motion';
 import { ToastContainer, toast } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 import { useNavigate } from "react-router-dom";
+
+const COLORS = {
+  bg: "#F7FAFC",
+  card: "#FFFFFF",
+  border: "#E5E7EB",
+  accent: "#03346E",
+  accent2: "#6EACDA",
+  text: "#021526",
+  muted: "#6B7280",
+};
 
 const FileManager = () => {
   const { roomId } = useParams();
@@ -151,154 +161,176 @@ const FileManager = () => {
   };
 
   return (
-    <div className="bg-gradient-to-br from-[#030718] via-[#0A1428] to-[#0F2E6B] min-h-screen p-6">
-      <ToastContainer position="top-right" theme="dark" />
-      <div className="mb-4">
+    <div
+      className="min-h-screen p-8"
+      style={{
+        background: COLORS.bg,
+      }}
+    >
+      <ToastContainer position="top-right" theme="light" />
+      <div className="mb-6">
         <button
           onClick={() => navigate(`/room/${roomId}`)}
-          className="flex items-center px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition"
+          className="flex items-center px-4 py-2 rounded-lg font-medium bg-[#03346E] text-white hover:bg-[#021526] transition-all"
         >
           ← Back to Chat
         </button>
       </div>
-      <motion.div 
+      <motion.div
         initial={{ opacity: 0, y: -20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.5 }}
         className="container mx-auto"
       >
         {/* Header */}
-        <motion.div 
+        <motion.div
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           transition={{ delay: 0.2 }}
           className="mb-8"
         >
-          <h1 className="text-3xl md:text-4xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-blue-200 to-indigo-100">
+          <h1
+            className="text-3xl font-bold"
+            style={{
+              color: COLORS.accent,
+              letterSpacing: "-0.01em",
+            }}
+          >
             File Manager
           </h1>
-          <p className="text-blue-100/70 mt-2">
+          <p className="text-base mt-2" style={{ color: COLORS.muted }}>
             Upload, view, and manage room files
           </p>
         </motion.div>
-
         {/* Upload Section */}
-        <motion.div 
+        <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.3 }}
-          className="backdrop-blur-md bg-white/5 border border-blue-500/20 rounded-xl p-6 mb-8"
+          className="rounded-xl p-6 mb-8 border shadow-sm"
+          style={{
+            background: COLORS.card,
+            borderColor: COLORS.border,
+          }}
         >
-          <h2 className="text-xl font-semibold text-white mb-4 flex items-center">
-            <Upload className="mr-2 h-5 w-5 text-blue-400" />
+          <h2 className="text-xl font-semibold mb-4 flex items-center" style={{ color: COLORS.accent }}>
+            <Upload className="mr-2 h-5 w-5" style={{ color: COLORS.accent2 }} />
             Upload New File
           </h2>
-          
           <form onSubmit={handleFileUpload} className="space-y-4">
             <div>
-              <label className="block text-sm font-medium text-blue-100/80 mb-1">File Name</label>
+              <label className="block text-sm font-medium mb-1" style={{ color: COLORS.text }}>
+                File Name
+              </label>
               <input
                 type="text"
                 value={fileName}
                 readOnly
-                className="w-full px-4 py-2 rounded-lg bg-white/10 border border-blue-500/30 text-blue-100 focus:outline-none focus:ring-2 focus:ring-blue-500/50"
+                className="w-full px-4 py-2 rounded-lg border bg-white text-[#021526] border-[#E5E7EB] focus:outline-none focus:ring-2 focus:ring-[#03346E] transition-all"
               />
             </div>
-            
             <div>
-              <label className="block text-sm font-medium text-blue-100/80 mb-1">Select File</label>
+              <label className="block text-sm font-medium mb-1" style={{ color: COLORS.text }}>
+                Select File
+              </label>
               <input
                 type="file"
                 onChange={handleFileChange}
-                className="w-full px-4 py-2 rounded-lg bg-white/10 border border-blue-500/30 text-blue-100 focus:outline-none focus:ring-2 focus:ring-blue-500/50 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-blue-500 file:text-white hover:file:bg-blue-600"
+                className="w-full px-4 py-2 rounded-lg border bg-white text-[#021526] border-[#E5E7EB] focus:outline-none focus:ring-2 focus:ring-[#03346E] transition-all"
                 required
               />
             </div>
-            
             <motion.button
               type="submit"
               whileHover={{ scale: 1.02 }}
               whileTap={{ scale: 0.98 }}
-              className="px-6 py-3 bg-gradient-to-r from-blue-500 to-indigo-500 text-white rounded-lg font-medium hover:shadow-blue-500/50 transition-all duration-300"
+              className="px-6 py-2 rounded-lg font-semibold bg-[#03346E] text-white hover:bg-[#021526] transition-all"
             >
               Upload File
             </motion.button>
           </form>
-          
           {uploadMessage && (
-            <motion.div 
+            <motion.div
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
-              className="mt-4 p-3 bg-green-500/20 border border-green-500/30 rounded-lg text-green-200"
+              className="mt-4 p-3 rounded-lg text-[#03346E] font-semibold border"
+              style={{
+                background: "#F1F5F9",
+                borderColor: COLORS.accent2,
+              }}
             >
               {uploadMessage}
             </motion.div>
           )}
         </motion.div>
-
         {/* Files List */}
-        <motion.div 
+        <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.4 }}
-          className="backdrop-blur-md bg-white/5 border border-blue-500/20 rounded-xl p-6"
+          className="rounded-xl p-6 border shadow-sm"
+          style={{
+            background: COLORS.card,
+            borderColor: COLORS.border,
+          }}
         >
-          <h2 className="text-xl font-semibold text-white mb-6 flex items-center">
-            <FileText className="mr-2 h-5 w-5 text-blue-400" />
+          <h2 className="text-xl font-semibold mb-6 flex items-center" style={{ color: COLORS.accent }}>
+            <FileText className="mr-2 h-5 w-5" style={{ color: COLORS.accent2 }} />
             Room Files
           </h2>
-          
           {files.length === 0 ? (
-            <motion.p 
+            <motion.p
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               transition={{ delay: 0.5 }}
-              className="text-blue-100/70 text-center py-8"
+              className="text-base text-center py-8"
+              style={{ color: COLORS.muted }}
             >
               No files uploaded yet
             </motion.p>
           ) : (
-            <motion.div 
+            <motion.div
               variants={containerVariants}
               initial="hidden"
               animate="visible"
               className="space-y-4"
             >
               {files.map((file) => (
-                <motion.div 
+                <motion.div
                   key={file.id}
                   variants={itemVariants}
-                  className="bg-white/10 border border-blue-500/20 rounded-lg p-4 transition-all hover:bg-blue-900/20"
+                  className="rounded-lg p-4 border flex flex-col md:flex-row justify-between items-start md:items-center gap-4 shadow-sm bg-white"
+                  style={{
+                    borderColor: COLORS.border,
+                  }}
                 >
-                  <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-                    <div>
-                      <h3 className="font-bold text-white">{file.name}</h3>
-                      <p className="text-sm text-blue-100/70">
-                        Uploaded by: {file.uploaded_by || 'User'} • {formatDate(file.uploaded_at || new Date())}
-                      </p>
-                    </div>
-                    
-                    <div className="flex flex-wrap gap-2">
-                      <motion.button
-                        whileHover={{ scale: 1.05 }}
-                        whileTap={{ scale: 0.95 }}
-                        onClick={() => handleViewFile(file.id)}
-                        className="px-4 py-2 bg-indigo-600/60 text-white rounded-lg hover:bg-indigo-600/80 transition-colors flex items-center"
-                      >
-                        <Eye className="h-4 w-4 mr-1" />
-                        View
-                      </motion.button>
-                      
-                      <motion.button
-                        whileHover={{ scale: 1.05 }}
-                        whileTap={{ scale: 0.95 }}
-                        onClick={() => handleDeleteFile(file.id)}
-                        className="px-4 py-2 bg-red-600/60 text-white rounded-lg hover:bg-red-600/80 transition-colors flex items-center"
-                      >
-                        <Trash2 className="h-4 w-4 mr-1" />
-                        Delete
-                      </motion.button>
-                    </div>
+                  <div>
+                    <h3 className="font-bold text-lg" style={{ color: COLORS.accent }}>
+                      {file.name}
+                    </h3>
+                    <p className="text-sm" style={{ color: COLORS.muted }}>
+                      Uploaded by: {file.uploaded_by || 'User'} • {formatDate(file.uploaded_at || new Date())}
+                    </p>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    <motion.button
+                      whileHover={{ scale: 1.05 }}
+                      whileTap={{ scale: 0.95 }}
+                      onClick={() => handleViewFile(file.id)}
+                      className="px-4 py-2 rounded-lg font-medium bg-[#03346E] text-white hover:bg-[#021526] transition-all flex items-center"
+                    >
+                      <Eye className="h-4 w-4 mr-1" />
+                      View
+                    </motion.button>
+                    <motion.button
+                      whileHover={{ scale: 1.05 }}
+                      whileTap={{ scale: 0.95 }}
+                      onClick={() => handleDeleteFile(file.id)}
+                      className="px-4 py-2 rounded-lg font-medium bg-red-500 text-white hover:bg-red-700 transition-all flex items-center"
+                    >
+                      <Trash2 className="h-4 w-4 mr-1" />
+                      Delete
+                    </motion.button>
                   </div>
                 </motion.div>
               ))}
