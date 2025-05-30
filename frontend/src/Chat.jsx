@@ -154,11 +154,13 @@ const Chat = () => {
     if (!socketRef.current) return;
 
     socketRef.current.on("userJoined", ({ userId: remoteUserId, userName: remoteUserName }) => {
-      // Always add to remoteUserIds
+      // Always add to remoteUserIds and only create connection if video call is active
       setRemoteUserIds(prev => prev.includes(remoteUserId) ? prev : [...prev, remoteUserId]);
       setRemoteUsers(prev => ({ ...prev, [remoteUserId]: remoteUserName }));
-      if (isVideoCallActive) handleUserJoined(remoteUserId);
-      toast.info(`${remoteUserName || remoteUserId} joined the call`);
+      if (isVideoCallActive) {
+        handleUserJoined(remoteUserId);
+      }
+      toast.info(`${remoteUserName || remoteUserId} joined the room`);
     });
 
     socketRef.current.on("userLeft", ({ userId: remoteUserId, userName: remoteUserName }) => {
@@ -172,17 +174,22 @@ const Chat = () => {
         peerConnections.current[remoteUserId].close();
         delete peerConnections.current[remoteUserId];
       }
-      toast.info(`${remoteUserName || remoteUserId} left the call`);
+      toast.info(`${remoteUserName || remoteUserId} left the room`);
     });
 
     socketRef.current.on("existingParticipants", async ({ participants }) => {
+      console.log("Existing participants:", participants);
+      
       // Always add participants to remoteUserIds
+      const newUserIds = participants
+        .map(p => p.userId)
+        .filter(id => id !== userId);
+      
       setRemoteUserIds(prev => [
         ...prev,
-        ...participants
-          .map(p => p.userId)
-          .filter(id => id !== userId && !prev.includes(id))
+        ...newUserIds.filter(id => !prev.includes(id))
       ]);
+      
       setRemoteUsers(prev => {
         const updated = { ...prev };
         participants.forEach(p => {
@@ -191,6 +198,7 @@ const Chat = () => {
         return updated;
       });
 
+      // Only create peer connections if video call is active
       if (isVideoCallActive && localStreamRef.current) {
         for (const participant of participants) {
           if (participant.userId !== userId) {
@@ -236,7 +244,8 @@ const Chat = () => {
       socketRef.current.emit("joinCall", { roomId, userId, userName });
 
       // Create peer connections for all existing remote users
-      remoteUserIds.forEach((remoteUserId) => {
+      const validRemoteUsers = remoteUserIds.filter(id => id !== userId);
+      validRemoteUsers.forEach((remoteUserId) => {
         handleUserJoined(remoteUserId);
       });
 
@@ -250,7 +259,9 @@ const Chat = () => {
   const endVideoCall = () => {
     Object.values(peerConnections.current).forEach(connection => connection.close());
     peerConnections.current = {};
-    setRemoteUserIds([]);
+    
+    // Don't clear remoteUserIds - keep tracking users in room
+    // setRemoteUserIds([]);
 
     if (localStreamRef.current) {
       localStreamRef.current.getTracks().forEach(track => track.stop());
@@ -271,6 +282,7 @@ const Chat = () => {
   };
 
   const handleUserJoined = async (remoteUserId) => {
+    console.log("Handling user joined:", remoteUserId, "Video call active:", isVideoCallActive);
     if (isVideoCallActive && localStreamRef.current) {
       const peerConnection = await createPeerConnection(remoteUserId);
       try {
@@ -285,6 +297,7 @@ const Chat = () => {
   };
 
   const handleOffer = async ({ offer, from }) => {
+    console.log("Received offer from:", from, "Video call active:", isVideoCallActive);
     if (isVideoCallActive && localStreamRef.current) {
       const peerConnection = await createPeerConnection(from);
       try {
@@ -323,6 +336,7 @@ const Chat = () => {
   };
 
   const createPeerConnection = async (remoteUserId) => {
+    console.log("Creating peer connection for:", remoteUserId, "Local stream:", localStreamRef.current?.id);
     if (!localStreamRef.current) return null;
 
     if (peerConnections.current[remoteUserId]) {
@@ -339,11 +353,13 @@ const Chat = () => {
     peerConnections.current[remoteUserId] = peerConnection;
 
     peerConnection.ontrack = (event) => {
+      console.log("Received remote track from:", remoteUserId, event.streams[0]);
       if (event.streams[0]) {
         setTimeout(() => {
           const remoteVideo = remoteVideoRefs.current[remoteUserId];
           if (remoteVideo && !remoteVideo.srcObject) {
             remoteVideo.srcObject = event.streams[0];
+            console.log("Set remote video source for:", remoteUserId);
           }
         }, 100);
       }
@@ -358,7 +374,9 @@ const Chat = () => {
       }
     };
 
+    // Add local tracks to peer connection
     localStreamRef.current.getTracks().forEach((track) => {
+      console.log("Adding track to peer connection:", track.kind);
       peerConnection.addTrack(track, localStreamRef.current);
     });
 
@@ -605,9 +623,9 @@ const Chat = () => {
                   </div>
                 </div>
                 {/* Remote Videos */}
-                {remoteUserIds.filter(id => id !== userId).map((remoteUserId, idx) => (
+                {remoteUserIds.filter(id => id !== userId).map((remoteUserId) => (
                   <div
-                    key={remoteUserId || idx}
+                    key={remoteUserId}
                     className="relative w-48 h-32 sm:w-64 sm:h-40 rounded-xl overflow-hidden shadow-lg transition-transform hover:scale-105 cursor-pointer"
                     style={{
                       background: COLORS.card,
@@ -615,11 +633,11 @@ const Chat = () => {
                     }}
                   >
                     <video
-                      ref={el => remoteVideoRefs.current[remoteUserId || idx] = el}
+                      ref={el => remoteVideoRefs.current[remoteUserId] = el}
                       autoPlay
                       playsInline
                       className="w-full h-full object-cover"
-                      onClick={() => handleVideoClick(remoteVideoRefs.current[remoteUserId || idx])}
+                      onClick={() => handleVideoClick(remoteVideoRefs.current[remoteUserId])}
                     />
                     <div className="absolute bottom-0 left-0 right-0"
                       style={{
@@ -628,7 +646,7 @@ const Chat = () => {
                       }}
                     >
                       <span className="text-xs font-semibold" style={{ color: COLORS.accent }}>
-                        {remoteUsers[remoteUserId] || "User"}
+                        {remoteUsers[remoteUserId] || remoteUserId}
                       </span>
                     </div>
                   </div>
