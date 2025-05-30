@@ -45,6 +45,7 @@ const Chat = () => {
   const localStreamRef = useRef(null);
   const peerConnections = useRef({});
   const remoteVideoRefs = useRef({});
+  const isVideoCallActiveRef = useRef(false);
 
   // Redirect if no user data
   useEffect(() => {
@@ -108,100 +109,100 @@ const Chat = () => {
 
   // Initialize socket connection
   useEffect(() => {
-    socketRef.current = io(SOCKET_URL);
+  socketRef.current = io(SOCKET_URL);
 
-    socketRef.current.emit("joinRoom", { room_id: roomId, user_id: userId, user_name: userName });
+  socketRef.current.emit("joinRoom", { room_id: roomId, user_id: userId, user_name: userName });
 
-    socketRef.current.on("receiveMessage", (data) => {
-      setMessages((prev) => [...prev, data]);
-      if (data.userId !== userId) {
-        toast.info(`New message from ${data.userName}`, { autoClose: 2000 });
+  socketRef.current.on("receiveMessage", (data) => {
+    setMessages((prev) => [...prev, data]);
+    if (data.userId !== userId) {
+      toast.info(`New message from ${data.userName}`, { autoClose: 2000 });
+    }
+  });
+
+  socketRef.current.on("error", (data) => {
+    toast.error(data.message);
+  });
+
+  // WebRTC event listeners - moved here to avoid dependency issues
+  socketRef.current.on("userJoined", ({ userId: remoteUserId, userName: remoteUserName }) => {
+    console.log("User joined:", remoteUserId, "Current video call active:", isVideoCallActiveRef.current);
+    setRemoteUserIds(prev => prev.includes(remoteUserId) ? prev : [...prev, remoteUserId]);
+    setRemoteUsers(prev => ({ ...prev, [remoteUserId]: remoteUserName }));
+    
+    // Only create peer connection if video call is active at the time
+    setTimeout(() => {
+      if (isVideoCallActiveRef.current && localStreamRef.current) {
+        handleUserJoined(remoteUserId);
       }
-    });
+    }, 100);
+    
+    toast.info(`${remoteUserName || remoteUserId} joined the room`);
+  });
 
-    socketRef.current.on("error", (data) => {
-      toast.error(data.message);
+  socketRef.current.on("userLeft", ({ userId: remoteUserId, userName: remoteUserName }) => {
+    setRemoteUserIds(prev => prev.filter(id => id !== remoteUserId));
+    setRemoteUsers(prev => {
+      const updated = { ...prev };
+      delete updated[remoteUserId];
+      return updated;
     });
+    if (peerConnections.current[remoteUserId]) {
+      peerConnections.current[remoteUserId].close();
+      delete peerConnections.current[remoteUserId];
+    }
+    toast.info(`${remoteUserName || remoteUserId} left the room`);
+  });
 
-    // WebRTC event listeners - moved here to avoid dependency issues
-    socketRef.current.on("userJoined", ({ userId: remoteUserId, userName: remoteUserName }) => {
-      console.log("User joined:", remoteUserId, "Current video call active:", isVideoCallActive);
-      setRemoteUserIds(prev => prev.includes(remoteUserId) ? prev : [...prev, remoteUserId]);
-      setRemoteUsers(prev => ({ ...prev, [remoteUserId]: remoteUserName }));
-      
-      // Only create peer connection if video call is active at the time
-      setTimeout(() => {
-        if (isVideoCallActive && localStreamRef.current) {
-          handleUserJoined(remoteUserId);
-        }
-      }, 100);
-      
-      toast.info(`${remoteUserName || remoteUserId} joined the room`);
-    });
-
-    socketRef.current.on("userLeft", ({ userId: remoteUserId, userName: remoteUserName }) => {
-      setRemoteUserIds(prev => prev.filter(id => id !== remoteUserId));
-      setRemoteUsers(prev => {
-        const updated = { ...prev };
-        delete updated[remoteUserId];
-        return updated;
+  socketRef.current.on("existingParticipants", async ({ participants }) => {
+    console.log("Existing participants:", participants);
+    
+    const newUserIds = participants
+      .map(p => p.userId)
+      .filter(id => id !== userId);
+    
+    setRemoteUserIds(prev => [
+      ...prev,
+      ...newUserIds.filter(id => !prev.includes(id))
+    ]);
+    
+    setRemoteUsers(prev => {
+      const updated = { ...prev };
+      participants.forEach(p => {
+        if (p.userId !== userId) updated[p.userId] = p.userName;
       });
-      if (peerConnections.current[remoteUserId]) {
-        peerConnections.current[remoteUserId].close();
-        delete peerConnections.current[remoteUserId];
-      }
-      toast.info(`${remoteUserName || remoteUserId} left the room`);
+      return updated;
     });
 
-    socketRef.current.on("existingParticipants", async ({ participants }) => {
-      console.log("Existing participants:", participants);
-      
-      const newUserIds = participants
-        .map(p => p.userId)
-        .filter(id => id !== userId);
-      
-      setRemoteUserIds(prev => [
-        ...prev,
-        ...newUserIds.filter(id => !prev.includes(id))
-      ]);
-      
-      setRemoteUsers(prev => {
-        const updated = { ...prev };
-        participants.forEach(p => {
-          if (p.userId !== userId) updated[p.userId] = p.userName;
-        });
-        return updated;
-      });
-
-      // Create peer connections for existing participants if video call is active
-      if (isVideoCallActive && localStreamRef.current) {
-        for (const participant of participants) {
-          if (participant.userId !== userId) {
-            const remoteUserId = participant.userId;
-            setTimeout(async () => {
-              const peerConnection = await createPeerConnection(remoteUserId);
-              try {
-                const offer = await peerConnection.createOffer();
-                await peerConnection.setLocalDescription(offer);
-                socketRef.current.emit("offer", { offer, to: remoteUserId });
-              } catch (error) {
-                console.error("Error creating offer for existing participant:", error);
-                toast.error("Connection error");
-              }
-            }, 100);
-          }
+    // Create peer connections for existing participants if video call is active
+    if (isVideoCallActiveRef.current && localStreamRef.current) {
+      for (const participant of participants) {
+        if (participant.userId !== userId) {
+          const remoteUserId = participant.userId;
+          setTimeout(async () => {
+            const peerConnection = await createPeerConnection(remoteUserId);
+            try {
+              const offer = await peerConnection.createOffer();
+              await peerConnection.setLocalDescription(offer);
+              socketRef.current.emit("offer", { offer, to: remoteUserId });
+            } catch (error) {
+              console.error("Error creating offer for existing participant:", error);
+              toast.error("Connection error");
+            }
+          }, 100);
         }
       }
-    });
+    }
+  });
 
-    socketRef.current.on("offer", handleOffer);
-    socketRef.current.on("answer", handleAnswer);
-    socketRef.current.on("ice-candidate", handleICECandidate);
+  socketRef.current.on("offer", handleOffer);
+  socketRef.current.on("answer", handleAnswer);
+  socketRef.current.on("ice-candidate", handleICECandidate);
 
-    return () => {
-      socketRef.current.disconnect();
-    };
-  }, [roomId, userId, userName]);
+  return () => {
+    socketRef.current.disconnect();
+  };
+}, [roomId, userId, userName]);
 
   // Fetch initial messages and room data
   useEffect(() => {
@@ -224,7 +225,7 @@ const Chat = () => {
     fetchData();
   }, [roomId]);
 
-  const startVideoCall = async () => {
+const startVideoCall = async () => {
   try {
     console.log("Starting video call with existing users:", remoteUserIds);
     
@@ -236,18 +237,16 @@ const Chat = () => {
     }
 
     setIsVideoCallActive(true);
-    
-    // Set a ref to track video call state immediately
-    const videoCallActiveRef = { current: true };
+    isVideoCallActiveRef.current = true; // Set ref immediately
     
     // Emit joinCall immediately after setting up local stream
     socketRef.current.emit("joinCall", { roomId, userId, userName });
     
     // Handle offers that might come before state updates
     const handleDelayedOffer = ({ offer, from }) => {
-      console.log("Handling delayed offer from:", from, "Video active:", videoCallActiveRef.current);
+      console.log("Handling delayed offer from:", from, "Video active:", isVideoCallActiveRef.current);
       
-      if (!videoCallActiveRef.current || !localStreamRef.current) {
+      if (!isVideoCallActiveRef.current || !localStreamRef.current) {
         console.log("Video call not active or no local stream, ignoring offer");
         return;
       }
@@ -298,59 +297,57 @@ const Chat = () => {
   }
 };
 
-  const endVideoCall = () => {
-    Object.values(peerConnections.current).forEach(connection => connection.close());
-    peerConnections.current = {};
-    
-    // Don't clear remoteUserIds - keep tracking users in room
-    // setRemoteUserIds([]);
+const endVideoCall = () => {
+  Object.values(peerConnections.current).forEach(connection => connection.close());
+  peerConnections.current = {};
+  
+  if (localStreamRef.current) {
+    localStreamRef.current.getTracks().forEach(track => track.stop());
+    localStreamRef.current = null;
+  }
 
-    if (localStreamRef.current) {
-      localStreamRef.current.getTracks().forEach(track => track.stop());
-      localStreamRef.current = null;
+  if (localVideoRef.current) {
+    localVideoRef.current.srcObject = null;
+  }
+
+  Object.values(remoteVideoRefs.current).forEach(video => {
+    if (video) video.srcObject = null;
+  });
+
+  setIsVideoCallActive(false);
+  isVideoCallActiveRef.current = false; // Set ref immediately
+  socketRef.current.emit("leaveCall", { roomId, userId, userName });
+  toast.info("Video call ended");
+};
+
+const handleUserJoined = async (remoteUserId) => {
+  console.log("handleUserJoined called for:", remoteUserId, "Video active:", isVideoCallActiveRef.current, "Local stream:", !!localStreamRef.current);
+  
+  if (!isVideoCallActiveRef.current || !localStreamRef.current) {
+    console.log("Video call not active or no local stream, skipping peer connection");
+    return;
+  }
+
+  try {
+    const peerConnection = await createPeerConnection(remoteUserId);
+    if (peerConnection) {
+      const offer = await peerConnection.createOffer();
+      await peerConnection.setLocalDescription(offer);
+      console.log("Sending offer to:", remoteUserId);
+      socketRef.current.emit("offer", { offer, to: remoteUserId });
     }
+  } catch (error) {
+    console.error("Error in handleUserJoined:", error);
+    toast.error("Failed to connect with new participant");
+  }
+};
 
-    if (localVideoRef.current) {
-      localVideoRef.current.srcObject = null;
-    }
-
-    Object.values(remoteVideoRefs.current).forEach(video => {
-      if (video) video.srcObject = null;
-    });
-
-    setIsVideoCallActive(false);
-    socketRef.current.emit("leaveCall", { roomId, userId, userName });
-    toast.info("Video call ended");
-  };
-
-  const handleUserJoined = async (remoteUserId) => {
-    console.log("handleUserJoined called for:", remoteUserId, "Video active:", isVideoCallActive, "Local stream:", !!localStreamRef.current);
-    
-    if (!isVideoCallActive || !localStreamRef.current) {
-      console.log("Video call not active or no local stream, skipping peer connection");
-      return;
-    }
-
-    try {
-      const peerConnection = await createPeerConnection(remoteUserId);
-      if (peerConnection) {
-        const offer = await peerConnection.createOffer();
-        await peerConnection.setLocalDescription(offer);
-        console.log("Sending offer to:", remoteUserId);
-        socketRef.current.emit("offer", { offer, to: remoteUserId });
-      }
-    } catch (error) {
-      console.error("Error in handleUserJoined:", error);
-      toast.error("Failed to connect with new participant");
-    }
-  };
-
-  const handleOffer = async ({ offer, from }) => {
-  console.log("Received offer from:", from, "Video call active:", isVideoCallActive);
+const handleOffer = async ({ offer, from }) => {
+  console.log("Received offer from:", from, "Video call active:", isVideoCallActiveRef.current);
   
   // Add a small delay to ensure state has updated
   setTimeout(async () => {
-    if (!isVideoCallActive || !localStreamRef.current) {
+    if (!isVideoCallActiveRef.current || !localStreamRef.current) {
       console.log("Video call not active or no local stream, ignoring offer");
       return;
     }
