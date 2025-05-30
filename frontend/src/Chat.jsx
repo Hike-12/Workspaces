@@ -683,7 +683,7 @@ const handleICECandidate = async ({ candidate, from }) => {
               background: COLORS.bg,
             }}
           >
-            <div className="space-y-4">
+            <div className="space-y-4 overflow-y-auto">
               {messages.map((msg, index) => (
                 <div
                   key={msg._id || index}
