@@ -291,6 +291,7 @@ const createPeerConnection = (remoteUserId) => {
   // send our ICE
   pc.onicecandidate = e => {
     if (e.candidate) {
+      console.log("ICE candidate:", e.candidate.candidate);
       socketRef.current.emit("ice-candidate", { candidate: e.candidate, to: remoteUserId });
     }
   };
