@@ -126,7 +126,7 @@ const Chat = () => {
 
   // WebRTC event listeners - moved here to avoid dependency issues
   socketRef.current.on("userJoined", ({ userId: remoteUserId, userName: remoteUserName }) => {
-    console.log("User joined:", remoteUserId, "Current video call active:", isVideoCallActiveRef.current);
+    // console.log("User joined:", remoteUserId, "Current video call active:", isVideoCallActiveRef.current);
     setRemoteUserIds(prev => prev.includes(remoteUserId) ? prev : [...prev, remoteUserId]);
     setRemoteUsers(prev => ({ ...prev, [remoteUserId]: remoteUserName }));
     
@@ -155,7 +155,7 @@ const Chat = () => {
   });
 
 socketRef.current.on("existingParticipants", async ({ participants }) => {
-  console.log("Existing participants:", participants);
+  // console.log("Existing participants:", participants);
 
   const newUserIds = participants
     .map(p => p.userId)
@@ -206,7 +206,7 @@ socketRef.current.on("existingParticipants", async ({ participants }) => {
 
 const startVideoCall = async () => {
   try {
-    console.log("Starting video call with existing users:", remoteUserIds);
+    // console.log("Starting video call with existing users:", remoteUserIds);
 
     if (!localStreamRef.current) {
       localStreamRef.current = await navigator.mediaDevices.getUserMedia({
@@ -223,7 +223,7 @@ const startVideoCall = async () => {
     // Always create offers to all known remote users (from existingParticipants)
     setTimeout(() => {
       const validRemoteUsers = remoteUserIds.filter(id => id !== userId);
-      console.log("Creating connections for existing users:", validRemoteUsers);
+      // console.log("Creating connections for existing users:", validRemoteUsers);
 
       validRemoteUsers.forEach(async (remoteUserId) => {
         const pc = createPeerConnection(remoteUserId);
@@ -320,7 +320,7 @@ const handleOffer = async ({ offer, from }) => {
 
   // if we've already got their SDP, don’t re-answer
   if (pc.remoteDescription) {
-    console.log("⏩ already answered offer from", from);
+    // console.log("⏩ already answered offer from", from);
     return;
   }
 
@@ -329,7 +329,7 @@ const handleOffer = async ({ offer, from }) => {
     const answer = await pc.createAnswer();
     await pc.setLocalDescription(answer);
     socketRef.current.emit("answer", { answer, to: from });
-    console.log("✅ answered offer from", from);
+    // console.log("✅ answered offer from", from);
   } catch (err) {
     console.error("❌ error handling offer:", err);
     pc.close();
@@ -341,17 +341,17 @@ const handleOffer = async ({ offer, from }) => {
 const handleAnswer = async ({ answer, from }) => {
   const pc = peerConnections.current[from];
   if (!pc) {
-    console.log("⏩ ignore answer, no pc for", from);
+    // console.log("⏩ ignore answer, no pc for", from);
     return;
   }
   // only set once
   if (pc.remoteDescription) {
-    console.log("⏩ remote already set for", from);
+    // console.log("⏩ remote already set for", from);
     return;
   }
   try {
     await pc.setRemoteDescription(new RTCSessionDescription(answer));
-    console.log("✅ remote-answer set for", from);
+    // console.log("✅ remote-answer set for", from);
   } catch (err) {
     console.error("❌ failed to set remote answer:", err);
   }
@@ -364,7 +364,7 @@ const handleICECandidate = async ({ candidate, from }) => {
   try {
     await pc.addIceCandidate(new RTCIceCandidate(candidate));
   } catch (e) {
-    console.warn("ICE add failed:", e);
+    // console.warn("ICE add failed:", e);
   }
 };
 

@@ -39,7 +39,7 @@ const userCalls = new Map();
 const userSocketMap = new Map(); 
 
 io.on('connection', (socket) => {
-  console.log('New client connected:', socket.id);
+  // console.log('New client connected:', socket.id);
 
   // Join room
   socket.on('joinRoom', ({ room_id, user_id, user_name }) => {
@@ -53,7 +53,7 @@ io.on('connection', (socket) => {
     }
     activeRooms.get(room_id).set(user_id, user_name);
 
-    console.log(`User ${user_name} (${user_id}) joined room ${room_id}`);
+    // console.log(`User ${user_name} (${user_id}) joined room ${room_id}`);
   });
 
   // Handle chat messages
@@ -120,7 +120,7 @@ socket.on('ice-candidate', ({ candidate, to }) => {
 });
 
   socket.on('disconnect', async () => {
-    console.log('Client disconnected:', socket.id);
+    // console.log('Client disconnected:', socket.id);
 
     if (socket.roomId && socket.userId) {
       userSocketMap.delete(socket.userId);
