@@ -36,6 +36,7 @@ app.use('/api/messages', messageRoutes);
 // Socket.io for real-time features
 const activeRooms = new Map();
 const userCalls = new Map();
+const userSocketMap = new Map(); 
 
 io.on('connection', (socket) => {
   console.log('New client connected:', socket.id);
@@ -76,7 +77,7 @@ io.on('connection', (socket) => {
   socket.on('joinCall', ({ roomId, userId, userName }) => {
     const room = userCalls.get(roomId) || new Map();
     const participants = Array.from(room.entries()).map(([id, name]) => ({ userId: id, userName: name }));
-
+    userSocketMap.set(userId, socket.id);
     // Send existing participants to new user
     socket.emit('existingParticipants', { participants });
 
@@ -104,24 +105,25 @@ io.on('connection', (socket) => {
 
   // WebRTC signaling
   socket.on('offer', ({ offer, to }) => {
-  console.log(`Offer from ${socket.userId} to ${to}`);
-  socket.to(socket.roomId).emit('offer', { offer, from: socket.userId });
+  const targetId = userSocketMap.get(to);
+    if (targetId) io.to(targetId).emit('offer', { offer, from: socket.userId });
 });
 
 socket.on('answer', ({ answer, to }) => {
-  console.log(`Answer from ${socket.userId} to ${to}`);
-  socket.to(socket.roomId).emit('answer', { answer, from: socket.userId });
+ const targetId = userSocketMap.get(to);
+    if (targetId) io.to(targetId).emit('answer', { answer, from: socket.userId });
 });
 
 socket.on('ice-candidate', ({ candidate, to }) => {
-  console.log(`ICE candidate from ${socket.userId} to ${to}`);
-  socket.to(socket.roomId).emit('ice-candidate', { candidate, from: socket.userId });
+  const targetId = userSocketMap.get(to);
+    if (targetId) io.to(targetId).emit('ice-candidate', { candidate, from: socket.userId });
 });
 
   socket.on('disconnect', async () => {
     console.log('Client disconnected:', socket.id);
 
     if (socket.roomId && socket.userId) {
+      userSocketMap.delete(socket.userId);
       const room = activeRooms.get(socket.roomId);
       if (room) {
         room.delete(socket.userId);
