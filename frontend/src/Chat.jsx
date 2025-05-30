@@ -737,10 +737,6 @@ const createPeerConnection = async (remoteUserId) => {
                       onClick={() => handleVideoClick(remoteVideoRefs.current[remoteUserId])}
                     />
                     <div className="absolute bottom-0 left-0 right-0"
-                      style={{
-                        background: "rgba(255, 245, 225, 0.95)",
-                        padding: "0.5rem",
-                      }}
                     >
                       <span className="text-xs font-semibold" style={{ color: COLORS.accent }}>
                         {remoteUsers[remoteUserId] || remoteUserId}
