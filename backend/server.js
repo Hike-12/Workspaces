@@ -5,6 +5,7 @@ const cors = require('cors');
 const mongoose = require('mongoose');
 require('dotenv').config();
 const connectDB = require('./config/db');
+const cleanupEmptyRoom = require('./routes/chatRoomRoutes'); // Assuming you have a utility function for cleanup
 
 const roomRoutes = require('./routes/chatRoomRoutes');
 const fileRoutes = require('./routes/fileRoutes');
@@ -35,58 +36,6 @@ app.use('/api/messages', messageRoutes);
 // Socket.io for real-time features
 const activeRooms = new Map();
 const userCalls = new Map();
-
-
-const cleanupEmptyRoom = async (roomId) => {
-  try {
-    const Room = require('./models/ChatRoom');
-    const Message = require('./models/Message');
-    const File = require('./models/File');
-    const fs = require('fs');
-    
-    console.log(`Starting cleanup for room ${roomId}`);
-    
-    // Check if room still has participants in database
-    const room = await Room.findById(roomId);
-    if (!room) {
-      console.log(`Room ${roomId} not found in database`);
-      return;
-    }
-    
-    // Double-check that no users are still connected to this room
-    const activeRoom = activeRooms.get(roomId);
-    if (activeRoom && activeRoom.size > 0) {
-      console.log(`Room ${roomId} still has active users, skipping cleanup`);
-      return;
-    }
-    
-    // Delete all files associated with the room
-    const files = await File.find({ room_id: roomId });
-    for (const file of files) {
-      // Delete file from filesystem
-      if (fs.existsSync(file.path)) {
-        fs.unlinkSync(file.path);
-        console.log(`Deleted file: ${file.path}`);
-      }
-    }
-    
-    // Delete file records from database
-    await File.deleteMany({ room_id: roomId });
-    console.log(`Deleted ${files.length} file records for room ${roomId}`);
-    
-    // Delete all messages for the room
-    const messageCount = await Message.countDocuments({ room_id: roomId });
-    await Message.deleteMany({ room_id: roomId });
-    console.log(`Deleted ${messageCount} messages for room ${roomId}`);
-    
-    // Delete the room itself
-    await Room.findByIdAndDelete(roomId);
-    console.log(`Deleted room ${roomId} from database`);
-    
-  } catch (error) {
-    console.error(`Error cleaning up room ${roomId}:`, error);
-  }
-};
 
 io.on('connection', (socket) => {
   console.log('New client connected:', socket.id);
@@ -166,7 +115,7 @@ io.on('connection', (socket) => {
     socket.to(socket.roomId).emit('ice-candidate', { candidate, from: socket.userId });
   });
 
-  socket.on('disconnect', () => {
+  socket.on('disconnect', async () => {
     console.log('Client disconnected:', socket.id);
 
     if (socket.roomId && socket.userId) {
