@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useRef } from "react";
 import { io } from "socket.io-client";
 import { useParams, useNavigate } from "react-router-dom";
-import { Camera, Mic, MicOff, Monitor, Phone, PhoneOff, Video, VideoOff, LogOut, Users, Upload } from "lucide-react";
+import { Camera, Mic, MicOff, Monitor, Phone, PhoneOff, Video, VideoOff, LogOut, Upload } from "lucide-react";
 import { API_ENDPOINTS, SOCKET_URL } from "./lib/utils";
 import { ToastContainer, toast } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
@@ -22,7 +22,7 @@ const Chat = () => {
   const userName = localStorage.getItem("userName");
   const userId = localStorage.getItem("userId");
   const roomName = localStorage.getItem("roomName");
-  
+
   const [messages, setMessages] = useState([]);
   const [message, setMessage] = useState("");
   const [isVideoCallActive, setIsVideoCallActive] = useState(false);
@@ -34,6 +34,7 @@ const Chat = () => {
   const [isFullScreen, setIsFullScreen] = useState(false);
   const [fullScreenVideoSrc, setFullScreenVideoSrc] = useState(null);
   const [roomData, setRoomData] = useState(null);
+  const [remoteUsers, setRemoteUsers] = useState({});
 
   // Refs
   const messagesEndRef = useRef(null);
@@ -61,7 +62,7 @@ const Chat = () => {
       setIsFullScreen(true);
     }
   };
-  
+
   const closeFullScreen = () => {
     setIsFullScreen(false);
     setFullScreenVideoSrc(null);
@@ -98,11 +99,11 @@ const Chat = () => {
         toast.info(`New message from ${data.userName}`, { autoClose: 2000 });
       }
     });
-    
+
     socketRef.current.on("error", (data) => {
       toast.error(data.message);
     });
-    
+
     return () => {
       socketRef.current.disconnect();
     };
@@ -134,13 +135,22 @@ const Chat = () => {
     if (!socketRef.current) return;
 
     socketRef.current.on("userJoined", ({ userId: remoteUserId, userName: remoteUserName }) => {
-      setRemoteUserIds(prev => [...prev, remoteUserId]);
-      handleUserJoined(remoteUserId);
+      // Only add to remoteUserIds if video call is active
+      if (isVideoCallActive) {
+        setRemoteUserIds(prev => prev.includes(remoteUserId) ? prev : [...prev, remoteUserId]);
+      }
+      setRemoteUsers(prev => ({ ...prev, [remoteUserId]: remoteUserName }));
+      if (isVideoCallActive) handleUserJoined(remoteUserId);
       toast.info(`${remoteUserName || remoteUserId} joined the call`);
     });
-    
+
     socketRef.current.on("userLeft", ({ userId: remoteUserId, userName: remoteUserName }) => {
       setRemoteUserIds(prev => prev.filter(id => id !== remoteUserId));
+      setRemoteUsers(prev => {
+        const updated = { ...prev };
+        delete updated[remoteUserId];
+        return updated;
+      });
       if (peerConnections.current[remoteUserId]) {
         peerConnections.current[remoteUserId].close();
         delete peerConnections.current[remoteUserId];
@@ -149,24 +159,41 @@ const Chat = () => {
     });
 
     socketRef.current.on("existingParticipants", async ({ participants }) => {
-      setRemoteUserIds(prev => [...prev, ...participants.map(p => p.userId)]);
+      // Only add participants to remoteUserIds if video call is active
+      if (isVideoCallActive) {
+        setRemoteUserIds(prev => [
+          ...prev,
+          ...participants
+            .map(p => p.userId)
+            .filter(id => id !== userId && !prev.includes(id))
+        ]);
+      }
+      setRemoteUsers(prev => {
+        const updated = { ...prev };
+        participants.forEach(p => {
+          if (p.userId !== userId) updated[p.userId] = p.userName;
+        });
+        return updated;
+      });
 
       if (isVideoCallActive && localStreamRef.current) {
         for (const participant of participants) {
-          const remoteUserId = participant.userId;
-          const peerConnection = await createPeerConnection(remoteUserId);
-          try {
-            const offer = await peerConnection.createOffer();
-            await peerConnection.setLocalDescription(offer);
-            socketRef.current.emit("offer", { offer, to: remoteUserId });
-          } catch (error) {
-            console.error("Error creating offer for existing participant:", error);
-            toast.error("Connection error");
+          if (participant.userId !== userId) {
+            const remoteUserId = participant.userId;
+            const peerConnection = await createPeerConnection(remoteUserId);
+            try {
+              const offer = await peerConnection.createOffer();
+              await peerConnection.setLocalDescription(offer);
+              socketRef.current.emit("offer", { offer, to: remoteUserId });
+            } catch (error) {
+              console.error("Error creating offer for existing participant:", error);
+              toast.error("Connection error");
+            }
           }
         }
       }
     });
-    
+
     socketRef.current.on("offer", handleOffer);
     socketRef.current.on("answer", handleAnswer);
     socketRef.current.on("ice-candidate", handleICECandidate);
@@ -179,7 +206,7 @@ const Chat = () => {
       socketRef.current.off("ice-candidate");
       socketRef.current.off("existingParticipants");
     };
-  }, [isVideoCallActive]);
+  }, [isVideoCallActive, userId]);
 
   const startVideoCall = async () => {
     try {
@@ -189,10 +216,10 @@ const Chat = () => {
           audio: true,
         });
       }
-      
+
       setIsVideoCallActive(true);
       socketRef.current.emit("joinCall", { roomId, userId, userName });
-      
+
       remoteUserIds.forEach((remoteUserId) => {
         handleUserJoined(remoteUserId);
       });
@@ -245,7 +272,7 @@ const Chat = () => {
     if (isVideoCallActive && localStreamRef.current) {
       const peerConnection = await createPeerConnection(from);
       try {
-        await peerConnection.setRemoteDescription(new RTCSessionDescription(offer));
+        await peerConnection.setRemoteDescription(new window.RTCSessionDescription(offer));
         const answer = await peerConnection.createAnswer();
         await peerConnection.setLocalDescription(answer);
         socketRef.current.emit("answer", { answer, to: from });
@@ -260,7 +287,7 @@ const Chat = () => {
     try {
       const peerConnection = peerConnections.current[from];
       if (peerConnection && peerConnection.signalingState === "have-local-offer") {
-        await peerConnection.setRemoteDescription(new RTCSessionDescription(answer));
+        await peerConnection.setRemoteDescription(new window.RTCSessionDescription(answer));
       }
     } catch (error) {
       console.error("Error handling answer:", error);
@@ -271,7 +298,7 @@ const Chat = () => {
     try {
       if (peerConnections.current[from]) {
         await peerConnections.current[from].addIceCandidate(
-          new RTCIceCandidate(candidate)
+          new window.RTCIceCandidate(candidate)
         );
       }
     } catch (error) {
@@ -286,7 +313,7 @@ const Chat = () => {
       peerConnections.current[remoteUserId].close();
     }
 
-    const peerConnection = new RTCPeerConnection({
+    const peerConnection = new window.RTCPeerConnection({
       iceServers: [
         { urls: "stun:stun.l.google.com:19302" },
         { urls: "stun:stun1.l.google.com:19302" },
@@ -308,9 +335,9 @@ const Chat = () => {
 
     peerConnection.onicecandidate = (event) => {
       if (event.candidate) {
-        socketRef.current.emit("ice-candidate", { 
-          candidate: event.candidate, 
-          to: remoteUserId 
+        socketRef.current.emit("ice-candidate", {
+          candidate: event.candidate,
+          to: remoteUserId
         });
       }
     };
@@ -543,9 +570,9 @@ const Chat = () => {
                   </div>
                 </div>
                 {/* Remote Videos */}
-                {remoteUserIds.map((remoteUserId) => (
+                {remoteUserIds.map((remoteUserId, idx) => (
                   <div
-                    key={remoteUserId}
+                    key={remoteUserId || idx}
                     className="relative w-64 h-40 rounded-lg overflow-hidden border shadow-sm"
                     style={{
                       background: COLORS.card,
@@ -553,15 +580,15 @@ const Chat = () => {
                     }}
                   >
                     <video
-                      ref={el => remoteVideoRefs.current[remoteUserId] = el}
+                      ref={el => remoteVideoRefs.current[remoteUserId || idx] = el}
                       autoPlay
                       playsInline
                       className="w-full h-full object-cover cursor-pointer"
-                      onClick={() => handleVideoClick(remoteVideoRefs.current[remoteUserId])}
+                      onClick={() => handleVideoClick(remoteVideoRefs.current[remoteUserId || idx])}
                     />
                     <div className="absolute bottom-0 left-0 right-0 bg-white/70 p-1">
                       <span className="text-xs font-medium text-[#03346E]">
-                        {remoteUserId}
+                        {remoteUsers[remoteUserId] || "User"}
                       </span>
                     </div>
                   </div>
@@ -610,12 +637,12 @@ const Chat = () => {
             <div className="space-y-4">
               {messages.map((msg, index) => (
                 <div
-                  key={index}
-                  className={`flex ${msg.sender === userName ? 'justify-end' : 'justify-start'}`}
+                  key={msg._id || index}
+                  className={`flex ${msg.userId === userId ? 'justify-end' : 'justify-start'}`}
                 >
                   <div
                     className={`max-w-xs lg:max-w-md px-4 py-2 rounded-lg border shadow-sm ${
-                      msg.sender === userName
+                      msg.userId === userId
                         ? 'bg-[#03346E] text-white border-[#03346E]'
                         : 'bg-white text-[#021526] border-[#E5E7EB]'
                     }`}
@@ -663,12 +690,12 @@ const Chat = () => {
         </div>
       </div>
       {/* Full Screen Video Modal */}
-      {isFullScreen && (
+      {(isFullScreen && fullScreenVideoSrc) && (
         <div className="fixed inset-0 bg-black bg-opacity-90 flex items-center justify-center z-50" onClick={closeFullScreen}>
           {fullScreenVideoSrc instanceof MediaStream ? (
             <video
-              ref={(el) => {
-                if (el) el.srcObject = fullScreenVideoSrc;
+              ref={el => {
+                if (el && fullScreenVideoSrc) el.srcObject = fullScreenVideoSrc;
               }}
               autoPlay
               playsInline
@@ -680,6 +707,7 @@ const Chat = () => {
               src={fullScreenVideoSrc}
               autoPlay
               playsInline
+              muted
               className="w-full h-full object-contain"
             />
           )}
@@ -687,6 +715,6 @@ const Chat = () => {
       )}
     </div>
   );
-};
+}
 
 export default Chat;
