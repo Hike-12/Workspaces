@@ -335,29 +335,17 @@ const handleOffer = async ({ offer, from }) => {
 
 const handleAnswer = async ({ answer, from }) => {
   console.log("Received answer from:", from);
-  try {
-    const peerConnection = peerConnections.current[from];
-    if (!peerConnection) {
-      console.log("No peer connection found for answer from:", from);
-      return;
-    }
+  const pc = peerConnections.current[from];
+  if (!pc) return;
 
-    console.log("Peer connection signaling state:", peerConnection.signalingState);
-    
-    // Only set remote description if we're in the correct state
-    if (peerConnection.signalingState === "have-local-offer") {
-      await peerConnection.setRemoteDescription(new window.RTCSessionDescription(answer));
-      console.log("Successfully set remote description for:", from);
-    } else {
-      console.log("Ignoring answer - wrong signaling state:", peerConnection.signalingState);
+  try {
+    // drop the signalingState check and just set it once
+    if (!pc.remoteDescription) {
+      await pc.setRemoteDescription(new RTCSessionDescription(answer));
+      console.log("✅ Remote description set for:", from);
     }
-  } catch (error) {
-    console.error("Error handling answer:", error);
-    // Clean up failed connection
-    if (peerConnections.current[from]) {
-      peerConnections.current[from].close();
-      delete peerConnections.current[from];
-    }
+  } catch (err) {
+    console.error("Error setting remote description:", err);
   }
 };
 
@@ -497,23 +485,20 @@ const handleUserJoined = async (remoteUserId) => {
     toast.error("Failed to connect with new participant");
   }
 };
+
 const handleICECandidate = async ({ candidate, from }) => {
-  try {
-    const peerConnection = peerConnections.current[from];
-    if (peerConnection && peerConnection.remoteDescription) {
-      await peerConnection.addIceCandidate(new window.RTCIceCandidate(candidate));
-    } else {
-      console.log("Queuing ICE candidate for:", from);
-      // Queue the candidate if remote description isn't set yet
-      if (!peerConnection.queuedCandidates) {
-        peerConnection.queuedCandidates = [];
-      }
-      peerConnection.queuedCandidates.push(candidate);
-    }
-  } catch (error) {
-    console.error("Error adding ICE candidate:", error);
+  const pc = peerConnections.current[from];
+  if (!pc) {
+    console.warn("No PeerConnection for ICE from", from);
+    return;
   }
-  };
+  try {
+    await pc.addIceCandidate(new RTCIceCandidate(candidate));
+    console.log("✅ Added ICE candidate for:", from);
+  } catch (err) {
+    console.error("Error adding ICE candidate:", err);
+  }
+};
 
   const sendMessage = async () => {
     if (!message.trim()) return;
