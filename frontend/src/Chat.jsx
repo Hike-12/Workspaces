@@ -154,47 +154,26 @@ const Chat = () => {
     toast.info(`${remoteUserName || remoteUserId} left the room`);
   });
 
-  socketRef.current.on("existingParticipants", async ({ participants }) => {
-    console.log("Existing participants:", participants);
-    
-    const newUserIds = participants
-      .map(p => p.userId)
-      .filter(id => id !== userId);
-    
-    setRemoteUserIds(prev => [
-      ...prev,
-      ...newUserIds.filter(id => !prev.includes(id))
-    ]);
-    
-    setRemoteUsers(prev => {
-      const updated = { ...prev };
-      participants.forEach(p => {
-        if (p.userId !== userId) updated[p.userId] = p.userName;
-      });
-      return updated;
+socketRef.current.on("existingParticipants", async ({ participants }) => {
+  console.log("Existing participants:", participants);
+
+  const newUserIds = participants
+    .map(p => p.userId)
+    .filter(id => id !== userId);
+
+  setRemoteUserIds(prev => [
+    ...prev,
+    ...newUserIds.filter(id => !prev.includes(id))
+  ]);
+
+  setRemoteUsers(prev => {
+    const updated = { ...prev };
+    participants.forEach(p => {
+      if (p.userId !== userId) updated[p.userId] = p.userName;
     });
-
-    // Create peer connections for existing participants if video call is active
-    if (isVideoCallActiveRef.current && localStreamRef.current) {
-      for (const participant of participants) {
-        if (participant.userId !== userId) {
-          const remoteUserId = participant.userId;
-          setTimeout(async () => {
-            const peerConnection = await createPeerConnection(remoteUserId);
-            try {
-              const offer = await peerConnection.createOffer();
-              await peerConnection.setLocalDescription(offer);
-              socketRef.current.emit("offer", { offer, to: remoteUserId });
-            } catch (error) {
-              console.error("Error creating offer for existing participant:", error);
-              toast.error("Connection error");
-            }
-          }, 100);
-        }
-      }
-    }
+    return updated;
   });
-
+});
   socketRef.current.on("offer", handleOffer);
   socketRef.current.on("answer", handleAnswer);
   socketRef.current.on("ice-candidate", handleICECandidate);
@@ -228,7 +207,7 @@ const Chat = () => {
 const startVideoCall = async () => {
   try {
     console.log("Starting video call with existing users:", remoteUserIds);
-    
+
     if (!localStreamRef.current) {
       localStreamRef.current = await navigator.mediaDevices.getUserMedia({
         video: true,
@@ -238,18 +217,23 @@ const startVideoCall = async () => {
 
     setIsVideoCallActive(true);
     isVideoCallActiveRef.current = true;
-    
+
     socketRef.current.emit("joinCall", { roomId, userId, userName });
 
-    // Create connections for existing users after a short delay
+    // Always create offers to all known remote users (from existingParticipants)
     setTimeout(() => {
       const validRemoteUsers = remoteUserIds.filter(id => id !== userId);
       console.log("Creating connections for existing users:", validRemoteUsers);
-      
-      validRemoteUsers.forEach((remoteUserId) => {
-        setTimeout(() => {
-          handleUserJoined(remoteUserId);
-        }, 200);
+
+      validRemoteUsers.forEach(async (remoteUserId) => {
+        const pc = createPeerConnection(remoteUserId);
+        try {
+          const offer = await pc.createOffer();
+          await pc.setLocalDescription(offer);
+          socketRef.current.emit("offer", { offer, to: remoteUserId });
+        } catch (err) {
+          console.error("Error creating offer for", remoteUserId, err);
+        }
       });
     }, 500);
 
