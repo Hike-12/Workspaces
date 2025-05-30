@@ -137,7 +137,7 @@ const Chat = () => {
       }
     }, 100);
     
-    toast.info(`${remoteUserName || remoteUserId} joined the room`);
+    toast.info(`${remoteUserName || remoteUserId} joined the call or room`);
   });
 
   socketRef.current.on("userLeft", ({ userId: remoteUserId, userName: remoteUserName }) => {
@@ -151,7 +151,7 @@ const Chat = () => {
       peerConnections.current[remoteUserId].close();
       delete peerConnections.current[remoteUserId];
     }
-    toast.info(`${remoteUserName || remoteUserId} left the room`);
+    toast.info(`${remoteUserName || remoteUserId} left the call or room`);
   });
 
 socketRef.current.on("existingParticipants", async ({ participants }) => {
