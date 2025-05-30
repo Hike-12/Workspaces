@@ -154,10 +154,8 @@ const Chat = () => {
     if (!socketRef.current) return;
 
     socketRef.current.on("userJoined", ({ userId: remoteUserId, userName: remoteUserName }) => {
-      // Only add to remoteUserIds if video call is active
-      if (isVideoCallActive) {
-        setRemoteUserIds(prev => prev.includes(remoteUserId) ? prev : [...prev, remoteUserId]);
-      }
+      // Always add to remoteUserIds
+      setRemoteUserIds(prev => prev.includes(remoteUserId) ? prev : [...prev, remoteUserId]);
       setRemoteUsers(prev => ({ ...prev, [remoteUserId]: remoteUserName }));
       if (isVideoCallActive) handleUserJoined(remoteUserId);
       toast.info(`${remoteUserName || remoteUserId} joined the call`);
@@ -178,15 +176,13 @@ const Chat = () => {
     });
 
     socketRef.current.on("existingParticipants", async ({ participants }) => {
-      // Only add participants to remoteUserIds if video call is active
-      if (isVideoCallActive) {
-        setRemoteUserIds(prev => [
-          ...prev,
-          ...participants
-            .map(p => p.userId)
-            .filter(id => id !== userId && !prev.includes(id))
-        ]);
-      }
+      // Always add participants to remoteUserIds
+      setRemoteUserIds(prev => [
+        ...prev,
+        ...participants
+          .map(p => p.userId)
+          .filter(id => id !== userId && !prev.includes(id))
+      ]);
       setRemoteUsers(prev => {
         const updated = { ...prev };
         participants.forEach(p => {
@@ -239,6 +235,7 @@ const Chat = () => {
       setIsVideoCallActive(true);
       socketRef.current.emit("joinCall", { roomId, userId, userName });
 
+      // Create peer connections for all existing remote users
       remoteUserIds.forEach((remoteUserId) => {
         handleUserJoined(remoteUserId);
       });
@@ -608,7 +605,7 @@ const Chat = () => {
                   </div>
                 </div>
                 {/* Remote Videos */}
-                {remoteUserIds.map((remoteUserId, idx) => (
+                {remoteUserIds.filter(id => id !== userId).map((remoteUserId, idx) => (
                   <div
                     key={remoteUserId || idx}
                     className="relative w-48 h-32 sm:w-64 sm:h-40 rounded-xl overflow-hidden shadow-lg transition-transform hover:scale-105 cursor-pointer"
