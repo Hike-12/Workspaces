@@ -237,46 +237,9 @@ const startVideoCall = async () => {
     }
 
     setIsVideoCallActive(true);
-    isVideoCallActiveRef.current = true; // Set ref immediately
+    isVideoCallActiveRef.current = true;
     
-    // Emit joinCall immediately after setting up local stream
     socketRef.current.emit("joinCall", { roomId, userId, userName });
-    
-    // Handle offers that might come before state updates
-    const handleDelayedOffer = ({ offer, from }) => {
-      console.log("Handling delayed offer from:", from, "Video active:", isVideoCallActiveRef.current);
-      
-      if (!isVideoCallActiveRef.current || !localStreamRef.current) {
-        console.log("Video call not active or no local stream, ignoring offer");
-        return;
-      }
-
-      setTimeout(async () => {
-        try {
-          const peerConnection = await createPeerConnection(from);
-          if (peerConnection) {
-            await peerConnection.setRemoteDescription(new window.RTCSessionDescription(offer));
-            const answer = await peerConnection.createAnswer();
-            await peerConnection.setLocalDescription(answer);
-            console.log("Sending answer to:", from);
-            socketRef.current.emit("answer", { answer, to: from });
-          }
-        } catch (error) {
-          console.error("Error handling delayed offer:", error);
-          toast.error("Connection error");
-        }
-      }, 100);
-    };
-
-    // Temporarily override the offer handler for immediate processing
-    socketRef.current.off("offer");
-    socketRef.current.on("offer", handleDelayedOffer);
-    
-    // Restore normal offer handler after a delay
-    setTimeout(() => {
-      socketRef.current.off("offer");
-      socketRef.current.on("offer", handleOffer);
-    }, 2000);
 
     // Create connections for existing users after a short delay
     setTimeout(() => {
@@ -321,20 +284,23 @@ const endVideoCall = () => {
 };
 
 const handleUserJoined = async (remoteUserId) => {
-  console.log("handleUserJoined called for:", remoteUserId, "Video active:", isVideoCallActiveRef.current, "Local stream:", !!localStreamRef.current);
+  console.log("handleUserJoined called for:", remoteUserId, "Video active:", isVideoCallActiveRef.current);
   
   if (!isVideoCallActiveRef.current || !localStreamRef.current) {
     console.log("Video call not active or no local stream, skipping peer connection");
     return;
   }
 
-  // Check if we already have a connection with this user
   const existingConnection = peerConnections.current[remoteUserId];
-  if (existingConnection && 
-      (existingConnection.connectionState === 'connected' || 
-       existingConnection.connectionState === 'connecting')) {
-    console.log("Peer connection already exists in good state for:", remoteUserId);
-    return;
+  if (existingConnection) {
+    console.log("Connection exists for:", remoteUserId, "state:", existingConnection.connectionState);
+    
+    // Only create new connection if the existing one is truly failed
+    if (existingConnection.connectionState === 'connected' || 
+        existingConnection.connectionState === 'connecting') {
+      console.log("Peer connection already exists in good state for:", remoteUserId);
+      return;
+    }
   }
 
   try {
@@ -360,22 +326,22 @@ const handleOffer = async ({ offer, from }) => {
   }
 
   try {
-    // Check existing connection state and handle appropriately
     const existingConnection = peerConnections.current[from];
     if (existingConnection) {
-      console.log("Existing connection state:", existingConnection.signalingState);
+      console.log("Existing connection state:", existingConnection.connectionState, "signaling:", existingConnection.signalingState);
       
-      // Only proceed if we don't have a stable connection or if it's failed
-      if (existingConnection.signalingState === 'stable' || 
+      // If connection is stable/connected or already processing an offer, ignore
+      if (existingConnection.connectionState === 'connected' || 
+          existingConnection.signalingState === 'stable' ||
           existingConnection.signalingState === 'have-remote-offer') {
-        console.log("Connection already exists in good state for:", from);
+        console.log("Connection already established or in progress for:", from);
         return;
       }
       
-      // Close and recreate if in bad state
-      if (existingConnection.signalingState === 'closed' || 
-          existingConnection.connectionState === 'failed') {
-        console.log("Closing failed connection for:", from);
+      // Clean up failed connections
+      if (existingConnection.connectionState === 'failed' || 
+          existingConnection.connectionState === 'closed') {
+        console.log("Cleaning up failed connection for:", from);
         existingConnection.close();
         delete peerConnections.current[from];
       }
@@ -391,7 +357,6 @@ const handleOffer = async ({ offer, from }) => {
     }
   } catch (error) {
     console.error("Error handling offer:", error);
-    // Clean up failed connection
     if (peerConnections.current[from]) {
       peerConnections.current[from].close();
       delete peerConnections.current[from];
@@ -447,22 +412,26 @@ const handleAnswer = async ({ answer, from }) => {
 };
 
 const createPeerConnection = async (remoteUserId) => {
-  console.log("Creating peer connection for:", remoteUserId, "Local stream:", localStreamRef.current?.id);
+  console.log("Creating peer connection for:", remoteUserId);
   if (!localStreamRef.current) return null;
 
-  // Close existing connection if it exists
+  // Only close if it exists and is in a bad state
   if (peerConnections.current[remoteUserId]) {
-    console.log("Closing existing connection for:", remoteUserId);
-    peerConnections.current[remoteUserId].close();
-    delete peerConnections.current[remoteUserId];
+    const existing = peerConnections.current[remoteUserId];
+    if (existing.connectionState === 'failed' || existing.connectionState === 'closed') {
+      console.log("Closing failed connection for:", remoteUserId);
+      existing.close();
+      delete peerConnections.current[remoteUserId];
+    } else {
+      console.log("Reusing existing connection for:", remoteUserId);
+      return existing;
+    }
   }
 
   const peerConnection = new window.RTCPeerConnection({
     iceServers: [
       { urls: "stun:stun.l.google.com:19302" },
       { urls: "stun:stun1.l.google.com:19302" },
-      { urls: "stun:stun2.l.google.com:19302" },
-      // Add TURN servers for better connectivity
       {
         urls: "turn:openrelay.metered.ca:80",
         username: "openrelayproject",
@@ -481,7 +450,7 @@ const createPeerConnection = async (remoteUserId) => {
   peerConnection.queuedCandidates = [];
 
   peerConnection.ontrack = (event) => {
-    console.log("Received remote track from:", remoteUserId, event.streams[0]);
+    console.log("Received remote track from:", remoteUserId);
     if (event.streams[0]) {
       const remoteVideo = remoteVideoRefs.current[remoteUserId];
       if (remoteVideo) {
@@ -493,7 +462,6 @@ const createPeerConnection = async (remoteUserId) => {
 
   peerConnection.onicecandidate = (event) => {
     if (event.candidate) {
-      console.log(`Sending ICE candidate for ${remoteUserId}:`, event.candidate.type);
       socketRef.current.emit("ice-candidate", {
         candidate: event.candidate,
         to: remoteUserId
@@ -501,14 +469,17 @@ const createPeerConnection = async (remoteUserId) => {
     }
   };
 
-  // Enhanced connection state monitoring
   peerConnection.onconnectionstatechange = () => {
     console.log(`Connection state for ${remoteUserId}:`, peerConnection.connectionState);
     
     if (peerConnection.connectionState === 'failed') {
-      console.log(`Connection failed for ${remoteUserId}, cleaning up`);
-      peerConnection.close();
-      delete peerConnections.current[remoteUserId];
+      console.log(`Connection failed for ${remoteUserId}, will retry on next attempt`);
+      setTimeout(() => {
+        if (peerConnection.connectionState === 'failed') {
+          peerConnection.close();
+          delete peerConnections.current[remoteUserId];
+        }
+      }, 3000);
     }
   };
 
@@ -521,7 +492,6 @@ const createPeerConnection = async (remoteUserId) => {
   peerConnection.setRemoteDescription = async function(description) {
     await originalSetRemoteDescription(description);
     
-    // Process queued candidates
     if (peerConnection.queuedCandidates && peerConnection.queuedCandidates.length > 0) {
       console.log(`Processing ${peerConnection.queuedCandidates.length} queued candidates for:`, remoteUserId);
       for (const candidate of peerConnection.queuedCandidates) {
@@ -535,9 +505,8 @@ const createPeerConnection = async (remoteUserId) => {
     }
   };
 
-  // Add local tracks to peer connection
+  // Add local tracks
   localStreamRef.current.getTracks().forEach((track) => {
-    console.log("Adding track to peer connection:", track.kind);
     peerConnection.addTrack(track, localStreamRef.current);
   });
 
