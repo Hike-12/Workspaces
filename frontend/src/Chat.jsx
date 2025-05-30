@@ -426,6 +426,10 @@ const handleICECandidate = async ({ candidate, from }) => {
   };
 
   const toggleScreenShare = async () => {
+    if (!navigator.mediaDevices.getDisplayMedia) {
+  toast.error("Screen sharing is not supported on your device/browser.");
+  return;
+}
     if (isScreenSharing) {
       screenStream.getTracks().forEach(track => track.stop());
       setScreenStream(null);
