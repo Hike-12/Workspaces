@@ -332,12 +332,11 @@ const handleUserJoined = async (remoteUserId) => {
 // 3) on OFFER:
 const handleOffer = async ({ offer, from }) => {
   if (!localStreamRef.current) return;
-
   const pc = createPeerConnection(from);
 
-  // ignore duplicate offers
+  // if we've already got their SDP, don’t re-answer
   if (pc.remoteDescription) {
-    console.log("⏩ ignore duplicate offer from", from);
+    console.log("⏩ already answered offer from", from);
     return;
   }
 
@@ -361,21 +360,11 @@ const handleAnswer = async ({ answer, from }) => {
     console.log("⏩ ignore answer, no pc for", from);
     return;
   }
-
-  // only proceed if *we* created an offer
-  if (
-    pc.localDescription?.type !== 'offer' ||
-    pc.signalingState !== 'have-local-offer'
-  ) {
-    console.log(
-      "⏩ ignore answer, wrong state:",
-      pc.signalingState,
-      "localDesc:",
-      pc.localDescription?.type
-    );
+  // only set once
+  if (pc.remoteDescription) {
+    console.log("⏩ remote already set for", from);
     return;
   }
-
   try {
     await pc.setRemoteDescription(new RTCSessionDescription(answer));
     console.log("✅ remote-answer set for", from);
