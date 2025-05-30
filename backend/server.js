@@ -104,16 +104,19 @@ io.on('connection', (socket) => {
 
   // WebRTC signaling
   socket.on('offer', ({ offer, to }) => {
-    socket.to(socket.roomId).emit('offer', { offer, from: socket.userId });
-  });
+  console.log(`Offer from ${socket.userId} to ${to}`);
+  socket.to(socket.roomId).emit('offer', { offer, from: socket.userId });
+});
 
-  socket.on('answer', ({ answer, to }) => {
-    socket.to(socket.roomId).emit('answer', { answer, from: socket.userId });
-  });
+socket.on('answer', ({ answer, to }) => {
+  console.log(`Answer from ${socket.userId} to ${to}`);
+  socket.to(socket.roomId).emit('answer', { answer, from: socket.userId });
+});
 
-  socket.on('ice-candidate', ({ candidate, to }) => {
-    socket.to(socket.roomId).emit('ice-candidate', { candidate, from: socket.userId });
-  });
+socket.on('ice-candidate', ({ candidate, to }) => {
+  console.log(`ICE candidate from ${socket.userId} to ${to}`);
+  socket.to(socket.roomId).emit('ice-candidate', { candidate, from: socket.userId });
+});
 
   socket.on('disconnect', async () => {
     console.log('Client disconnected:', socket.id);

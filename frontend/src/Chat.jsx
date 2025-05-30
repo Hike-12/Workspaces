@@ -328,6 +328,12 @@ const handleUserJoined = async (remoteUserId) => {
     return;
   }
 
+  // Check if we already have a connection with this user
+  if (peerConnections.current[remoteUserId]) {
+    console.log("Peer connection already exists for:", remoteUserId);
+    return;
+  }
+
   try {
     const peerConnection = await createPeerConnection(remoteUserId);
     if (peerConnection) {
@@ -345,27 +351,30 @@ const handleUserJoined = async (remoteUserId) => {
 const handleOffer = async ({ offer, from }) => {
   console.log("Received offer from:", from, "Video call active:", isVideoCallActiveRef.current);
   
-  // Add a small delay to ensure state has updated
-  setTimeout(async () => {
-    if (!isVideoCallActiveRef.current || !localStreamRef.current) {
-      console.log("Video call not active or no local stream, ignoring offer");
-      return;
-    }
+  if (!isVideoCallActiveRef.current || !localStreamRef.current) {
+    console.log("Video call not active or no local stream, ignoring offer");
+    return;
+  }
 
-    try {
-      const peerConnection = await createPeerConnection(from);
-      if (peerConnection) {
-        await peerConnection.setRemoteDescription(new window.RTCSessionDescription(offer));
-        const answer = await peerConnection.createAnswer();
-        await peerConnection.setLocalDescription(answer);
-        console.log("Sending answer to:", from);
-        socketRef.current.emit("answer", { answer, to: from });
-      }
-    } catch (error) {
-      console.error("Error handling offer:", error);
-      toast.error("Connection error");
+  // Check if we already have a peer connection for this user
+  if (peerConnections.current[from]) {
+    console.log("Peer connection already exists for:", from, "ignoring duplicate offer");
+    return;
+  }
+
+  try {
+    const peerConnection = await createPeerConnection(from);
+    if (peerConnection) {
+      await peerConnection.setRemoteDescription(new window.RTCSessionDescription(offer));
+      const answer = await peerConnection.createAnswer();
+      await peerConnection.setLocalDescription(answer);
+      console.log("Sending answer to:", from);
+      socketRef.current.emit("answer", { answer, to: from });
     }
-  }, 100);
+  } catch (error) {
+    console.error("Error handling offer:", error);
+    toast.error("Connection error");
+  }
 };
 
   const handleAnswer = async ({ answer, from }) => {
@@ -380,64 +389,96 @@ const handleOffer = async ({ offer, from }) => {
   };
 
   const handleICECandidate = async ({ candidate, from }) => {
-    try {
-      if (peerConnections.current[from]) {
-        await peerConnections.current[from].addIceCandidate(
-          new window.RTCIceCandidate(candidate)
-        );
+  try {
+    const peerConnection = peerConnections.current[from];
+    if (peerConnection && peerConnection.remoteDescription) {
+      await peerConnection.addIceCandidate(new window.RTCIceCandidate(candidate));
+    } else {
+      console.log("Queuing ICE candidate for:", from);
+      // Queue the candidate if remote description isn't set yet
+      if (!peerConnection.queuedCandidates) {
+        peerConnection.queuedCandidates = [];
       }
-    } catch (error) {
-      console.error("Error adding ICE candidate:", error);
+      peerConnection.queuedCandidates.push(candidate);
+    }
+  } catch (error) {
+    console.error("Error adding ICE candidate:", error);
+  }
+};
+
+const createPeerConnection = async (remoteUserId) => {
+  console.log("Creating peer connection for:", remoteUserId, "Local stream:", localStreamRef.current?.id);
+  if (!localStreamRef.current) return null;
+
+  // Close existing connection if it exists
+  if (peerConnections.current[remoteUserId]) {
+    peerConnections.current[remoteUserId].close();
+  }
+
+  const peerConnection = new window.RTCPeerConnection({
+    iceServers: [
+      { urls: "stun:stun.l.google.com:19302" },
+      { urls: "stun:stun1.l.google.com:19302" },
+    ],
+  });
+
+  peerConnections.current[remoteUserId] = peerConnection;
+  peerConnection.queuedCandidates = [];
+
+  peerConnection.ontrack = (event) => {
+    console.log("Received remote track from:", remoteUserId, event.streams[0]);
+    if (event.streams[0]) {
+      setTimeout(() => {
+        const remoteVideo = remoteVideoRefs.current[remoteUserId];
+        if (remoteVideo) {
+          remoteVideo.srcObject = event.streams[0];
+          console.log("Set remote video source for:", remoteUserId);
+        }
+      }, 100);
     }
   };
 
-  const createPeerConnection = async (remoteUserId) => {
-    console.log("Creating peer connection for:", remoteUserId, "Local stream:", localStreamRef.current?.id);
-    if (!localStreamRef.current) return null;
-
-    if (peerConnections.current[remoteUserId]) {
-      peerConnections.current[remoteUserId].close();
+  peerConnection.onicecandidate = (event) => {
+    if (event.candidate) {
+      socketRef.current.emit("ice-candidate", {
+        candidate: event.candidate,
+        to: remoteUserId
+      });
     }
-
-    const peerConnection = new window.RTCPeerConnection({
-      iceServers: [
-        { urls: "stun:stun.l.google.com:19302" },
-        { urls: "stun:stun1.l.google.com:19302" },
-      ],
-    });
-
-    peerConnections.current[remoteUserId] = peerConnection;
-
-    peerConnection.ontrack = (event) => {
-      console.log("Received remote track from:", remoteUserId, event.streams[0]);
-      if (event.streams[0]) {
-        setTimeout(() => {
-          const remoteVideo = remoteVideoRefs.current[remoteUserId];
-          if (remoteVideo && !remoteVideo.srcObject) {
-            remoteVideo.srcObject = event.streams[0];
-            console.log("Set remote video source for:", remoteUserId);
-          }
-        }, 100);
-      }
-    };
-
-    peerConnection.onicecandidate = (event) => {
-      if (event.candidate) {
-        socketRef.current.emit("ice-candidate", {
-          candidate: event.candidate,
-          to: remoteUserId
-        });
-      }
-    };
-
-    // Add local tracks to peer connection
-    localStreamRef.current.getTracks().forEach((track) => {
-      console.log("Adding track to peer connection:", track.kind);
-      peerConnection.addTrack(track, localStreamRef.current);
-    });
-
-    return peerConnection;
   };
+
+  // Handle connection state changes
+  peerConnection.onconnectionstatechange = () => {
+    console.log(`Connection state for ${remoteUserId}:`, peerConnection.connectionState);
+  };
+
+  // Process queued ICE candidates when remote description is set
+  const originalSetRemoteDescription = peerConnection.setRemoteDescription.bind(peerConnection);
+  peerConnection.setRemoteDescription = async function(description) {
+    await originalSetRemoteDescription(description);
+    
+    // Process queued candidates
+    if (peerConnection.queuedCandidates && peerConnection.queuedCandidates.length > 0) {
+      console.log(`Processing ${peerConnection.queuedCandidates.length} queued candidates for:`, remoteUserId);
+      for (const candidate of peerConnection.queuedCandidates) {
+        try {
+          await peerConnection.addIceCandidate(new window.RTCIceCandidate(candidate));
+        } catch (error) {
+          console.error("Error adding queued ICE candidate:", error);
+        }
+      }
+      peerConnection.queuedCandidates = [];
+    }
+  };
+
+  // Add local tracks to peer connection
+  localStreamRef.current.getTracks().forEach((track) => {
+    console.log("Adding track to peer connection:", track.kind);
+    peerConnection.addTrack(track, localStreamRef.current);
+  });
+
+  return peerConnection;
+};
 
   const sendMessage = async () => {
     if (!message.trim()) return;
