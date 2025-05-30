@@ -28,6 +28,13 @@ const Home = () => {
   const [isCreating, setIsCreating] = useState(false);
   const [loading, setLoading] = useState(false);
 
+  // Ensure userId exists in localStorage
+  React.useEffect(() => {
+    if (!localStorage.getItem("userId")) {
+      localStorage.setItem("userId", uuidv4());
+    }
+  }, []);
+
   const handleInputChange = (e) => {
     setFormData({
       ...formData,
@@ -44,12 +51,13 @@ const Home = () => {
 
     setLoading(true);
     try {
+      const userId = localStorage.getItem("userId");
       const response = await fetch(API_ENDPOINTS.CREATE_ROOM, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify(formData),
+        body: JSON.stringify({ ...formData, userId }),
       });
 
       const data = await response.json();
@@ -80,12 +88,13 @@ const Home = () => {
 
     setLoading(true);
     try {
+      const userId = localStorage.getItem("userId");
       const response = await fetch(API_ENDPOINTS.JOIN_ROOM, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify(formData),
+        body: JSON.stringify({ ...formData, userId }),
       });
 
       const data = await response.json();

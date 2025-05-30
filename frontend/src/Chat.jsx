@@ -20,6 +20,7 @@ const Chat = () => {
   const { roomId } = useParams();
   const navigate = useNavigate();
   const userName = localStorage.getItem("userName");
+  const userId = localStorage.getItem("userId");
   const roomName = localStorage.getItem("roomName");
   
   const [messages, setMessages] = useState([]);
@@ -44,11 +45,11 @@ const Chat = () => {
 
   // Redirect if no user data
   useEffect(() => {
-    if (!userName || !roomId) {
+    if (!userName || !roomId || !userId) {
       navigate('/');
       return;
     }
-  }, [userName, roomId, navigate]);
+  }, [userName, roomId, userId, navigate]);
 
   const handleVideoClick = (videoElement) => {
     if (videoElement) {
@@ -88,12 +89,12 @@ const Chat = () => {
   // Initialize socket connection
   useEffect(() => {
     socketRef.current = io(SOCKET_URL);
-    
-    socketRef.current.emit("joinRoom", { room_id: roomId, user_name: userName });
-    
+
+    socketRef.current.emit("joinRoom", { room_id: roomId, user_id: userId, user_name: userName });
+
     socketRef.current.on("receiveMessage", (data) => {
       setMessages((prev) => [...prev, data]);
-      if (data.sender !== userName) {
+      if (data.userId !== userId) {
         toast.info(`New message from ${data.userName}`, { autoClose: 2000 });
       }
     });
@@ -105,7 +106,7 @@ const Chat = () => {
     return () => {
       socketRef.current.disconnect();
     };
-  }, [roomId, userName]);
+  }, [roomId, userId, userName]);
 
   // Fetch initial messages and room data
   useEffect(() => {
@@ -131,27 +132,28 @@ const Chat = () => {
   // WebRTC signaling setup
   useEffect(() => {
     if (!socketRef.current) return;
-    
-    socketRef.current.on("userJoined", ({ userId: remoteUserId }) => {
+
+    socketRef.current.on("userJoined", ({ userId: remoteUserId, userName: remoteUserName }) => {
       setRemoteUserIds(prev => [...prev, remoteUserId]);
       handleUserJoined(remoteUserId);
-      toast.info(`${remoteUserId} joined the call`);
+      toast.info(`${remoteUserName || remoteUserId} joined the call`);
     });
     
-    socketRef.current.on("userLeft", ({ userId: remoteUserId }) => {
+    socketRef.current.on("userLeft", ({ userId: remoteUserId, userName: remoteUserName }) => {
       setRemoteUserIds(prev => prev.filter(id => id !== remoteUserId));
       if (peerConnections.current[remoteUserId]) {
         peerConnections.current[remoteUserId].close();
         delete peerConnections.current[remoteUserId];
       }
-      toast.info(`${remoteUserId} left the call`);
+      toast.info(`${remoteUserName || remoteUserId} left the call`);
     });
 
     socketRef.current.on("existingParticipants", async ({ participants }) => {
-      setRemoteUserIds(prev => [...prev, ...participants]);
-      
+      setRemoteUserIds(prev => [...prev, ...participants.map(p => p.userId)]);
+
       if (isVideoCallActive && localStreamRef.current) {
-        for (const remoteUserId of participants) {
+        for (const participant of participants) {
+          const remoteUserId = participant.userId;
           const peerConnection = await createPeerConnection(remoteUserId);
           try {
             const offer = await peerConnection.createOffer();
@@ -189,7 +191,7 @@ const Chat = () => {
       }
       
       setIsVideoCallActive(true);
-      socketRef.current.emit("joinCall", roomId);
+      socketRef.current.emit("joinCall", { roomId, userId, userName });
       
       remoteUserIds.forEach((remoteUserId) => {
         handleUserJoined(remoteUserId);
@@ -221,7 +223,7 @@ const Chat = () => {
     });
 
     setIsVideoCallActive(false);
-    socketRef.current.emit("leaveCall", roomId);
+    socketRef.current.emit("leaveCall", { roomId, userId, userName });
     toast.info("Video call ended");
   };
 
@@ -327,14 +329,16 @@ const Chat = () => {
       room_id: roomId,
       sender: userName,
       content: message,
-      userName: userName
+      userName: userName,
+      userId: userId
     };
 
     socketRef.current.emit("sendMessage", {
       room_id: roomId,
       message,
       sender: userName,
-      userName: userName
+      userName: userName,
+      userId: userId
     });
 
     try {

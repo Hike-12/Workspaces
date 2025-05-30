@@ -40,29 +40,31 @@ io.on('connection', (socket) => {
   console.log('New client connected:', socket.id);
 
   // Join room
-  socket.on('joinRoom', ({ room_id, user_name }) => {
+  socket.on('joinRoom', ({ room_id, user_id, user_name }) => {
     socket.join(room_id);
+    socket.userId = user_id;
     socket.userName = user_name;
     socket.roomId = room_id;
-    
+
     if (!activeRooms.has(room_id)) {
-      activeRooms.set(room_id, new Set());
+      activeRooms.set(room_id, new Map());
     }
-    activeRooms.get(room_id).add(user_name);
-    
-    console.log(`User ${user_name} joined room ${room_id}`);
+    activeRooms.get(room_id).set(user_id, user_name);
+
+    console.log(`User ${user_name} (${user_id}) joined room ${room_id}`);
   });
 
   // Handle chat messages
   socket.on('sendMessage', async (data) => {
-    const { room_id, message, sender, userName } = data;
-    
+    const { room_id, message, sender, userName, userId } = data;
+
     const messageData = {
       room_id,
       sender,
       content: message,
       timestamp: new Date(),
-      userName
+      userName,
+      userId
     };
 
     // Broadcast to room
@@ -70,69 +72,69 @@ io.on('connection', (socket) => {
   });
 
   // Video call functionality
-  socket.on('joinCall', (roomId) => {
-    const room = userCalls.get(roomId) || new Set();
-    const participants = Array.from(room);
-    
+  socket.on('joinCall', ({ roomId, userId, userName }) => {
+    const room = userCalls.get(roomId) || new Map();
+    const participants = Array.from(room.entries()).map(([id, name]) => ({ userId: id, userName: name }));
+
     // Send existing participants to new user
     socket.emit('existingParticipants', { participants });
-    
+
     // Add user to call
-    room.add(socket.userName);
+    room.set(userId, userName);
     userCalls.set(roomId, room);
-    
+
     // Notify others about new participant
-    socket.to(roomId).emit('userJoined', { userId: socket.userName });
+    socket.to(roomId).emit('userJoined', { userId, userName });
   });
 
-  socket.on('leaveCall', (roomId) => {
+  socket.on('leaveCall', ({ roomId, userId, userName }) => {
     const room = userCalls.get(roomId);
     if (room) {
-      room.delete(socket.userName);
+      room.delete(userId);
       if (room.size === 0) {
         userCalls.delete(roomId);
       } else {
         userCalls.set(roomId, room);
       }
     }
-    
-    socket.to(roomId).emit('userLeft', { userId: socket.userName });
+
+    socket.to(roomId).emit('userLeft', { userId, userName });
   });
 
   // WebRTC signaling
   socket.on('offer', ({ offer, to }) => {
-    socket.to(socket.roomId).emit('offer', { offer, from: socket.userName });
+    socket.to(socket.roomId).emit('offer', { offer, from: socket.userId });
   });
 
   socket.on('answer', ({ answer, to }) => {
-    socket.to(socket.roomId).emit('answer', { answer, from: socket.userName });
+    socket.to(socket.roomId).emit('answer', { answer, from: socket.userId });
   });
 
   socket.on('ice-candidate', ({ candidate, to }) => {
-    socket.to(socket.roomId).emit('ice-candidate', { candidate, from: socket.userName });
+    socket.to(socket.roomId).emit('ice-candidate', { candidate, from: socket.userId });
   });
 
   socket.on('disconnect', () => {
     console.log('Client disconnected:', socket.id);
-    
-    if (socket.roomId && socket.userName) {
+
+    if (socket.roomId && socket.userId) {
       const room = activeRooms.get(socket.roomId);
       if (room) {
-        room.delete(socket.userName);
+        room.delete(socket.userId);
         if (room.size === 0) {
           activeRooms.delete(socket.roomId);
         }
       }
-      
+
       const callRoom = userCalls.get(socket.roomId);
       if (callRoom) {
-        callRoom.delete(socket.userName);
+        callRoom.delete(socket.userId);
         if (callRoom.size === 0) {
           userCalls.delete(socket.roomId);
         } else {
           userCalls.set(socket.roomId, callRoom);
         }
-        socket.to(socket.roomId).emit('userLeft', { userId: socket.userName });
+        socket.to(socket.roomId).emit('userLeft', { userId: socket.userId, userName: socket.userName });
       }
     }
   });

@@ -20,6 +20,7 @@ const COLORS = {
 const FileManager = () => {
   const { roomId } = useParams();
   const userName = localStorage.getItem("userName");
+  const userId = localStorage.getItem("userId");
   const [files, setFiles] = useState([]);
   const [file, setFile] = useState(null);
   const [fileName, setFileName] = useState("");
@@ -85,6 +86,7 @@ const FileManager = () => {
     formData.append("file", file);
     formData.append("name", fileName);
     formData.append("userName", userName);
+    formData.append("userId", userId);
 
     try {
       const response = await fetch(API_ENDPOINTS.UPLOAD_FILE(roomId), {

@@ -19,17 +19,18 @@ router.get('/messages', async (req, res) => {
 // Save message
 router.post('/messages', async (req, res) => {
   try {
-    const { room_id, sender, content, userName } = req.body;
-    
+    const { room_id, sender, content, userName, userId } = req.body;
+
     const message = new Message({
       room_id,
       sender,
       content,
-      userName
+      userName,
+      userId
     });
-    
+
     await message.save();
-    
+
     res.status(201).json(message);
   } catch (error) {
     res.status(500).json({ message: 'Server error', error: error.message });

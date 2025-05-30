@@ -15,7 +15,8 @@ const roomSchema = new mongoose.Schema({
     default: ''
   },
   participants: [{
-    type: String // Just store usernames
+    userId: { type: String, required: true },
+    userName: { type: String, required: true }
   }],
   createdBy: {
     type: String,

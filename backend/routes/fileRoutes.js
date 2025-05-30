@@ -30,18 +30,18 @@ const upload = multer({
 router.post('/rooms/:roomId/files/upload', upload.single('file'), async (req, res) => {
   try {
     const { roomId } = req.params;
-    const { name, userName } = req.body;
-    
+    const { name, userName, userId } = req.body;
+
     if (!req.file) {
       return res.status(400).json({ message: 'No file uploaded' });
     }
-    
+
     // Verify room exists
     const room = await Room.findById(roomId);
     if (!room) {
       return res.status(404).json({ message: 'Room not found' });
     }
-    
+
     const file = new File({
       name: name || req.file.originalname,
       originalName: req.file.originalname,
@@ -49,11 +49,12 @@ router.post('/rooms/:roomId/files/upload', upload.single('file'), async (req, re
       mimetype: req.file.mimetype,
       size: req.file.size,
       room_id: roomId,
-      uploaded_by: userName
+      uploaded_by: userName,
+      // Optionally: uploaded_by_id: userId
     });
-    
+
     await file.save();
-    
+
     res.status(201).json({
       message: 'File uploaded successfully',
       file_id: file._id
