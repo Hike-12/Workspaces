@@ -70,12 +70,29 @@ const Chat = () => {
     setFullScreenVideoSrc(null);
   };
 
-  const leaveRoom = () => {
-    localStorage.removeItem("userName");
-    localStorage.removeItem("roomId");
-    localStorage.removeItem("roomName");
-    navigate('/');
-  };
+  const leaveRoom = async () => {
+  try {
+    // Call backend to leave room
+    await fetch(`${API_ENDPOINTS.NODE_BASE_URL}/api/rooms/leave`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        roomId,
+        userId
+      })
+    });
+  } catch (error) {
+    console.error('Error leaving room:', error);
+  }
+  
+  // Clean up local storage and navigate
+  localStorage.removeItem("userName");
+  localStorage.removeItem("roomId");
+  localStorage.removeItem("roomName");
+  navigate('/');
+};
 
   // Auto-scroll to bottom of messages
   useEffect(() => {

@@ -5,6 +5,7 @@ export const API_ENDPOINTS = {
   // Room endpoints
   CREATE_ROOM: `${NODE_BASE_URL}/api/rooms/create`,
   JOIN_ROOM: `${NODE_BASE_URL}/api/rooms/join`,
+  LEAVE_ROOM: `${NODE_BASE_URL}/api/rooms/leave`,
   GET_ROOM: (roomId) => `${NODE_BASE_URL}/api/rooms/${roomId}`,
   
   // File endpoints
