@@ -701,7 +701,7 @@ const handleICECandidate = async ({ candidate, from }) => {
                       <span className="text-xs font-semibold opacity-80" style={{ color: msg.userId === userId ? COLORS.accent2 : COLORS.accent }}>
                         {msg.userName || msg.sender}
                       </span>
-                      <span className="text-xs opacity-60" style={{ color: msg.userId === userId ? COLORS.accent2 : COLORS.muted }}>
+                      <span className="text-xs opacity-60 p-2" style={{ color: msg.userId === userId ? COLORS.accent2 : COLORS.muted }}>
                         {formatTime(msg.timestamp || msg.createdAt)}
                       </span>
                     </div>
