@@ -145,7 +145,7 @@ const Home = () => {
               letterSpacing: "-0.02em",
             }}
           >
-            VideoPulse
+            Focal Point
           </h1>
           <p className="text-lg" style={{ color: COLORS.accent2 }}>
             Connect, chat, and collaborate in real-time
