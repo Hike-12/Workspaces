@@ -84,7 +84,7 @@ Workspaces/
 
 1. **Clone the repository**
    ```bash
-   git clone <your-repo-url>
+   git clone https://github.com/Hike-12/Workspaces.git
    cd Workspaces
    ```
 
