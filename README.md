@@ -255,16 +255,5 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 - **MongoDB** for reliable data storage
 - **Vercel** for seamless deployment
 
-## 📞 Support
-
-If you encounter any issues or have questions:
-1. Check the [Issues](../../issues) section
-2. Create a new issue with detailed information
-3. Join our community discussions
-
----
-
-**Made with ❤️ by [Your Name]**
-
 *FocalPoint - Bringing people together through seamless video communication*
 
