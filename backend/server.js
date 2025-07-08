@@ -5,7 +5,6 @@ const cors = require('cors');
 const mongoose = require('mongoose');
 require('dotenv').config();
 const connectDB = require('./config/db');
-const cleanupEmptyRoom = require('./routes/chatRoomRoutes'); // Assuming you have a utility function for cleanup
 
 const roomRoutes = require('./routes/chatRoomRoutes');
 const fileRoutes = require('./routes/fileRoutes');
@@ -13,35 +12,33 @@ const messageRoutes = require('./routes/messageRoutes');
 
 const app = express();
 const server = http.createServer(app);
+
+// Allowed origins for CORS
+const allowedOrigins = [
+  "http://localhost:3000",
+  "http://localhost:5173", 
+  "http://localhost:80",
+  "http://frontend:80",
+  "https://focalpoint-gamma.vercel.app"
+];
+
 const io = socketIo(server, {
   cors: {
-    origin: ["http://localhost:3000", "http://localhost:5173","https://focalpoint-gamma.vercel.app"],
-    methods: ["GET", "POST"]
+    origin: allowedOrigins,
+    methods: ["GET", "POST"],
+    credentials: true
   }
 });
 
-app.use((req, res, next) => {
-  res.header('Access-Control-Allow-Origin', 'https://focalpoint-gamma.vercel.app');
-  res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
-  res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
-  res.header('Access-Control-Allow-Credentials', 'true');
-  
-  if (req.method === 'OPTIONS') {
-    res.sendStatus(200);
-  } else {
-    next();
-  }
-});
-// Middleware
+// REMOVE the manual CORS headers - they're causing conflicts
+// Use only the cors middleware
 app.use(cors({
-  origin: [
-    "http://localhost:3000",
-    "http://localhost:5173",
-    "https://focalpoint-gamma.vercel.app"
-  ],
+  origin: allowedOrigins,
   methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-  credentials: true
+  credentials: true,
+  optionsSuccessStatus: 200
 }));
+
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
@@ -59,7 +56,7 @@ const userCalls = new Map();
 const userSocketMap = new Map(); 
 
 io.on('connection', (socket) => {
-  // console.log('New client connected:', socket.id);
+  console.log('New client connected:', socket.id);
 
   // Join room
   socket.on('joinRoom', ({ room_id, user_id, user_name }) => {
@@ -73,7 +70,7 @@ io.on('connection', (socket) => {
     }
     activeRooms.get(room_id).set(user_id, user_name);
 
-    // console.log(`User ${user_name} (${user_id}) joined room ${room_id}`);
+    console.log(`User ${user_name} (${user_id}) joined room ${room_id}`);
   });
 
   // Handle chat messages
@@ -98,6 +95,7 @@ io.on('connection', (socket) => {
     const room = userCalls.get(roomId) || new Map();
     const participants = Array.from(room.entries()).map(([id, name]) => ({ userId: id, userName: name }));
     userSocketMap.set(userId, socket.id);
+    
     // Send existing participants to new user
     socket.emit('existingParticipants', { participants });
 
@@ -125,22 +123,22 @@ io.on('connection', (socket) => {
 
   // WebRTC signaling
   socket.on('offer', ({ offer, to }) => {
-  const targetId = userSocketMap.get(to);
+    const targetId = userSocketMap.get(to);
     if (targetId) io.to(targetId).emit('offer', { offer, from: socket.userId });
-});
+  });
 
-socket.on('answer', ({ answer, to }) => {
- const targetId = userSocketMap.get(to);
+  socket.on('answer', ({ answer, to }) => {
+    const targetId = userSocketMap.get(to);
     if (targetId) io.to(targetId).emit('answer', { answer, from: socket.userId });
-});
+  });
 
-socket.on('ice-candidate', ({ candidate, to }) => {
-  const targetId = userSocketMap.get(to);
+  socket.on('ice-candidate', ({ candidate, to }) => {
+    const targetId = userSocketMap.get(to);
     if (targetId) io.to(targetId).emit('ice-candidate', { candidate, from: socket.userId });
-});
+  });
 
   socket.on('disconnect', async () => {
-    // console.log('Client disconnected:', socket.id);
+    console.log('Client disconnected:', socket.id);
 
     if (socket.roomId && socket.userId) {
       userSocketMap.delete(socket.userId);
@@ -149,7 +147,9 @@ socket.on('ice-candidate', ({ candidate, to }) => {
         room.delete(socket.userId);
         if (room.size === 0) {
           activeRooms.delete(socket.roomId);
-          await cleanupEmptyRoom(socket.roomId);
+          // FIXED: Remove the problematic cleanupEmptyRoom call
+          // If you need cleanup, implement it properly below
+          console.log(`Room ${socket.roomId} is now empty and cleaned up`);
         }
       }
 
