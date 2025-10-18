@@ -1,51 +1,64 @@
 import React, { useEffect, useState, useRef } from "react";
 import { io } from "socket.io-client";
 import { useParams, useNavigate } from "react-router-dom";
-import { Camera, Mic, MicOff, Monitor, Phone, PhoneOff, Video, VideoOff, LogOut, Upload } from "lucide-react";
+import {
+  FaVideo,
+  FaMicrophone,
+  FaMicrophoneSlash,
+  FaDesktop,
+  FaPhone,
+  FaPhoneSlash,
+  FaVideoSlash,
+  FaSignOutAlt,
+  FaFileUpload,
+  FaPaperPlane,
+  FaExpand,
+  FaTimes,
+  FaUserCircle,
+  FaMoon,
+  FaSun
+} from "react-icons/fa";
 import { API_ENDPOINTS, SOCKET_URL } from "./lib/utils";
 import { ToastContainer, toast } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
-
-const COLORS = {
-  bg: "#0C1844",         // main background (navy)
-  card: "#FFF5E1",       // card/panel (cream)
-  border: "#0C1844",     // border (navy)
-  accent: "#0C1844",     // primary accent (navy)
-  accent2: "#FFF5E1",    // secondary accent (cream)
-  text: "#0C1844",       // main text (navy on cream)
-  textLight: "#FFF5E1",  // light text (cream on navy)
-  muted: "#0C1844",      // muted text (navy)
-  myMessage: "#1a3d72",  // my messages background (lighter navy)
-};
+import { useVideoCall } from "./hooks/useVideoCall";
+import { useTheme } from "./contexts/ThemeContext";
 
 const Chat = () => {
   const { roomId } = useParams();
   const navigate = useNavigate();
+  const { theme, toggleTheme } = useTheme();
   const userName = localStorage.getItem("userName");
   const userId = localStorage.getItem("userId");
   const roomName = localStorage.getItem("roomName");
 
   const [messages, setMessages] = useState([]);
   const [message, setMessage] = useState("");
-  const [isVideoCallActive, setIsVideoCallActive] = useState(false);
-  const [remoteUserIds, setRemoteUserIds] = useState([]);
-  const [isCameraEnabled, setIsCameraEnabled] = useState(true);
-  const [isScreenSharing, setIsScreenSharing] = useState(false);
-  const [screenStream, setScreenStream] = useState(null);
-  const [isMicEnabled, setIsMicEnabled] = useState(true);
-  const [isFullScreen, setIsFullScreen] = useState(false);
-  const [fullScreenVideoSrc, setFullScreenVideoSrc] = useState(null);
   const [roomData, setRoomData] = useState(null);
-  const [remoteUsers, setRemoteUsers] = useState({});
 
-  // Refs
   const messagesEndRef = useRef(null);
   const socketRef = useRef(null);
-  const localVideoRef = useRef(null);
-  const localStreamRef = useRef(null);
-  const peerConnections = useRef({});
-  const remoteVideoRefs = useRef({});
-  const isVideoCallActiveRef = useRef(false);
+
+  // Use video call hook
+  const {
+    isVideoCallActive,
+    remoteUserIds,
+    remoteUsers,
+    isCameraEnabled,
+    isScreenSharing,
+    isMicEnabled,
+    isFullScreen,
+    fullScreenVideoSrc,
+    localVideoRef,
+    remoteVideoRefs,
+    startVideoCall,
+    endVideoCall,
+    toggleCamera,
+    toggleMic,
+    toggleScreenShare,
+    handleVideoClick,
+    closeFullScreen,
+  } = useVideoCall({ socketRef, roomId, userId, userName });
 
   // Redirect if no user data
   useEffect(() => {
@@ -55,144 +68,58 @@ const Chat = () => {
     }
   }, [userName, roomId, userId, navigate]);
 
-  const handleVideoClick = (videoElement) => {
-    if (videoElement) {
-      if (videoElement.srcObject) {
-        setFullScreenVideoSrc(videoElement.srcObject);
-      } else {
-        setFullScreenVideoSrc(videoElement.src);
-      }
-      setIsFullScreen(true);
-    }
-  };
-
-  const closeFullScreen = () => {
-    setIsFullScreen(false);
-    setFullScreenVideoSrc(null);
-  };
-
   const leaveRoom = async () => {
-  try {
-    // Call backend to leave room
-    await fetch(`${API_ENDPOINTS.NODE_BASE_URL}/api/rooms/leave`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        roomId,
-        userId
-      })
-    });
-  } catch (error) {
-    console.error('Error leaving room:', error);
-  }
-  
-  // Clean up local storage and navigate
-  localStorage.removeItem("userName");
-  localStorage.removeItem("roomId");
-  localStorage.removeItem("roomName");
-  navigate('/');
-};
+    try {
+      await fetch(`${API_ENDPOINTS.NODE_BASE_URL}/api/rooms/leave`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ roomId, userId })
+      });
+    } catch (error) {
+      console.error('Error leaving room:', error);
+    }
+    localStorage.removeItem("userName");
+    localStorage.removeItem("roomId");
+    localStorage.removeItem("roomName");
+    navigate('/');
+  };
 
   // Auto-scroll to bottom of messages
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
-  // Set video source when call becomes active
-  useEffect(() => {
-    if (isVideoCallActive && localStreamRef.current && localVideoRef.current) {
-      localVideoRef.current.srcObject = localStreamRef.current;
-    }
-  }, [isVideoCallActive]);
-
   // Initialize socket connection
   useEffect(() => {
-  socketRef.current = io(SOCKET_URL);
+    socketRef.current = io(SOCKET_URL);
+    socketRef.current.emit("joinRoom", { room_id: roomId, user_id: userId, user_name: userName });
 
-  socketRef.current.emit("joinRoom", { room_id: roomId, user_id: userId, user_name: userName });
-
-  socketRef.current.on("receiveMessage", (data) => {
-    setMessages((prev) => [...prev, data]);
-    if (data.userId !== userId) {
-      toast.info(`New message from ${data.userName}`, { autoClose: 2000 });
-    }
-  });
-
-  socketRef.current.on("error", (data) => {
-    toast.error(data.message);
-  });
-
-  // WebRTC event listeners - moved here to avoid dependency issues
-  socketRef.current.on("userJoined", ({ userId: remoteUserId, userName: remoteUserName }) => {
-    // console.log("User joined:", remoteUserId, "Current video call active:", isVideoCallActiveRef.current);
-    setRemoteUserIds(prev => prev.includes(remoteUserId) ? prev : [...prev, remoteUserId]);
-    setRemoteUsers(prev => ({ ...prev, [remoteUserId]: remoteUserName }));
-    
-    // Only create peer connection if video call is active at the time
-    setTimeout(() => {
-      if (isVideoCallActiveRef.current && localStreamRef.current) {
-        handleUserJoined(remoteUserId);
+    socketRef.current.on("receiveMessage", (data) => {
+      setMessages((prev) => [...prev, data]);
+      if (data.userId !== userId) {
+        toast.info(`New message from ${data.userName}`, { autoClose: 2000 });
       }
-    }, 100);
-    
-    toast.info(`${remoteUserName || remoteUserId} joined the call or room`);
-  });
-
-  socketRef.current.on("userLeft", ({ userId: remoteUserId, userName: remoteUserName }) => {
-    setRemoteUserIds(prev => prev.filter(id => id !== remoteUserId));
-    setRemoteUsers(prev => {
-      const updated = { ...prev };
-      delete updated[remoteUserId];
-      return updated;
     });
-    if (peerConnections.current[remoteUserId]) {
-      peerConnections.current[remoteUserId].close();
-      delete peerConnections.current[remoteUserId];
-    }
-    toast.info(`${remoteUserName || remoteUserId} left the call or room`);
-  });
 
-socketRef.current.on("existingParticipants", async ({ participants }) => {
-  // console.log("Existing participants:", participants);
-
-  const newUserIds = participants
-    .map(p => p.userId)
-    .filter(id => id !== userId);
-
-  setRemoteUserIds(prev => [
-    ...prev,
-    ...newUserIds.filter(id => !prev.includes(id))
-  ]);
-
-  setRemoteUsers(prev => {
-    const updated = { ...prev };
-    participants.forEach(p => {
-      if (p.userId !== userId) updated[p.userId] = p.userName;
+    socketRef.current.on("error", (data) => {
+      toast.error(data.message);
     });
-    return updated;
-  });
-});
-  socketRef.current.on("offer", handleOffer);
-  socketRef.current.on("answer", handleAnswer);
-  socketRef.current.on("ice-candidate", handleICECandidate);
 
-  return () => {
-    socketRef.current.disconnect();
-  };
-}, [roomId, userId, userName]);
+    return () => {
+      socketRef.current.disconnect();
+    };
+  }, [roomId, userId, userName]);
 
   // Fetch initial messages and room data
   useEffect(() => {
     const fetchData = async () => {
       try {
-        // Fetch messages
         const messagesResponse = await fetch(`${API_ENDPOINTS.GET_MESSAGES}?room_id=${roomId}`);
         const messagesData = await messagesResponse.json();
         setMessages(messagesData);
 
-        // Fetch room data
         const roomResponse = await fetch(API_ENDPOINTS.GET_ROOM(roomId));
         const roomData = await roomResponse.json();
         setRoomData(roomData.room);
@@ -203,172 +130,6 @@ socketRef.current.on("existingParticipants", async ({ participants }) => {
     };
     fetchData();
   }, [roomId]);
-
-const startVideoCall = async () => {
-  try {
-    // console.log("Starting video call with existing users:", remoteUserIds);
-
-    if (!localStreamRef.current) {
-      localStreamRef.current = await navigator.mediaDevices.getUserMedia({
-        video: true,
-        audio: true,
-      });
-    }
-
-    setIsVideoCallActive(true);
-    isVideoCallActiveRef.current = true;
-
-    socketRef.current.emit("joinCall", { roomId, userId, userName });
-
-    // Always create offers to all known remote users (from existingParticipants)
-    setTimeout(() => {
-      const validRemoteUsers = remoteUserIds.filter(id => id !== userId);
-      // console.log("Creating connections for existing users:", validRemoteUsers);
-
-      validRemoteUsers.forEach(async (remoteUserId) => {
-        const pc = createPeerConnection(remoteUserId);
-        try {
-          const offer = await pc.createOffer();
-          await pc.setLocalDescription(offer);
-          socketRef.current.emit("offer", { offer, to: remoteUserId });
-        } catch (err) {
-          console.error("Error creating offer for", remoteUserId, err);
-        }
-      });
-    }, 500);
-
-    toast.success("Video call started successfully!");
-  } catch (error) {
-    console.error("Error starting video call:", error);
-    toast.error("Could not access camera/microphone. Please check permissions.");
-  }
-};
-
-const endVideoCall = () => {
-  Object.values(peerConnections.current).forEach(connection => connection.close());
-  peerConnections.current = {};
-  
-  if (localStreamRef.current) {
-    localStreamRef.current.getTracks().forEach(track => track.stop());
-    localStreamRef.current = null;
-  }
-
-  if (localVideoRef.current) {
-    localVideoRef.current.srcObject = null;
-  }
-
-  Object.values(remoteVideoRefs.current).forEach(video => {
-    if (video) video.srcObject = null;
-  });
-
-  setIsVideoCallActive(false);
-  isVideoCallActiveRef.current = false; // Set ref immediately
-  socketRef.current.emit("leaveCall", { roomId, userId, userName });
-  toast.info("Video call ended");
-};
-
-
-
-// 1) single factory:
-const createPeerConnection = (remoteUserId) => {
-  if (peerConnections.current[remoteUserId]) {
-    return peerConnections.current[remoteUserId];
-  }
-  const pc = new RTCPeerConnection({
-    iceServers: [
-      { urls: "stun:stun.l.google.com:19302" },
-      { urls: "turn:relay1.expressturn.com:3478", username: "efrelayusername", credential: "efrelaypassword" },
-    { urls: "turn:a.relay.metered.ca:80", username: "openrelayproject", credential: "openrelayproject" },
-    { urls: "turn:a.relay.metered.ca:443", username: "openrelayproject", credential: "openrelayproject" },
-    ]
-  });
-  peerConnections.current[remoteUserId] = pc;
-
-  // add local tracks
-  localStreamRef.current.getTracks().forEach(track => {
-    pc.addTrack(track, localStreamRef.current);
-  });
-
-  // send our ICE
-  pc.onicecandidate = e => {
-    if (e.candidate) {
-      // console.log("ICE candidate:", e.candidate.candidate);
-      socketRef.current.emit("ice-candidate", { candidate: e.candidate, to: remoteUserId });
-    }
-  };
-
-  // attach remote
-  pc.ontrack = e => {
-    const el = remoteVideoRefs.current[remoteUserId];
-    if (el) el.srcObject = e.streams[0];
-  };
-
-  return pc;
-};
-
-// 2) on new peer:
-const handleUserJoined = async (remoteUserId) => {
-  if (!localStreamRef.current) return;
-  const pc = createPeerConnection(remoteUserId);
-  const offer = await pc.createOffer();
-  await pc.setLocalDescription(offer);
-  socketRef.current.emit("offer", { offer, to: remoteUserId });
-};
-
-// 3) on OFFER:
-const handleOffer = async ({ offer, from }) => {
-  if (!localStreamRef.current) return;
-  const pc = createPeerConnection(from);
-
-  // if we've already got their SDP, don’t re-answer
-  if (pc.remoteDescription) {
-    // console.log("⏩ already answered offer from", from);
-    return;
-  }
-
-  try {
-    await pc.setRemoteDescription(new RTCSessionDescription(offer));
-    const answer = await pc.createAnswer();
-    await pc.setLocalDescription(answer);
-    socketRef.current.emit("answer", { answer, to: from });
-    // console.log("✅ answered offer from", from);
-  } catch (err) {
-    console.error("❌ error handling offer:", err);
-    pc.close();
-    delete peerConnections.current[from];
-  }
-};
-
-// 4) on ANSWER:
-const handleAnswer = async ({ answer, from }) => {
-  const pc = peerConnections.current[from];
-  if (!pc) {
-    // console.log("⏩ ignore answer, no pc for", from);
-    return;
-  }
-  // only set once
-  if (pc.remoteDescription) {
-    // console.log("⏩ remote already set for", from);
-    return;
-  }
-  try {
-    await pc.setRemoteDescription(new RTCSessionDescription(answer));
-    // console.log("✅ remote-answer set for", from);
-  } catch (err) {
-    console.error("❌ failed to set remote answer:", err);
-  }
-};
-
-// 5) on ICE:
-const handleICECandidate = async ({ candidate, from }) => {
-  const pc = peerConnections.current[from];
-  if (!pc) return;
-  try {
-    await pc.addIceCandidate(new RTCIceCandidate(candidate));
-  } catch (e) {
-    // console.warn("ICE add failed:", e);
-  }
-};
 
   const sendMessage = async () => {
     if (!message.trim()) return;
@@ -401,80 +162,6 @@ const handleICECandidate = async ({ candidate, from }) => {
       toast.error("Failed to send message");
     }
   };
-  
-
-  const toggleCamera = () => {
-    if (!localStreamRef.current) return;
-
-    const videoTracks = localStreamRef.current.getVideoTracks();
-    videoTracks.forEach(track => {
-      track.enabled = !track.enabled;
-    });
-
-    setIsCameraEnabled(prev => !prev);
-    toast.info(videoTracks[0].enabled ? "Camera turned on" : "Camera turned off", { autoClose: 1500 });
-  };
-
-  const toggleMic = () => {
-    if (!localStreamRef.current) return;
-
-    const audioTracks = localStreamRef.current.getAudioTracks();
-    audioTracks.forEach(track => {
-      track.enabled = !track.enabled;
-    });
-
-    setIsMicEnabled(prev => !prev);
-    toast.info(audioTracks[0].enabled ? "Microphone unmuted" : "Microphone muted", { autoClose: 1500 });
-  };
-
-  const toggleScreenShare = async () => {
-    if (!navigator.mediaDevices.getDisplayMedia) {
-  toast.error("Screen sharing is not supported on your device/browser.");
-  return;
-}
-    if (isScreenSharing) {
-      screenStream.getTracks().forEach(track => track.stop());
-      setScreenStream(null);
-      setIsScreenSharing(false);
-
-      if (localStreamRef.current) {
-        const videoTrack = localStreamRef.current.getVideoTracks()[0];
-        Object.values(peerConnections.current).forEach(pc => {
-          const sender = pc.getSenders().find(s => s.track && s.track.kind === 'video');
-          if (sender) {
-            sender.replaceTrack(videoTrack);
-          }
-        });
-
-        localVideoRef.current.srcObject = localStreamRef.current;
-        toast.info("Screen sharing stopped", { autoClose: 1500 });
-      }
-    } else {
-      try {
-        const stream = await navigator.mediaDevices.getDisplayMedia({ video: true });
-        setScreenStream(stream);
-        setIsScreenSharing(true);
-
-        const screenTrack = stream.getVideoTracks()[0];
-        Object.values(peerConnections.current).forEach(pc => {
-          const sender = pc.getSenders().find(s => s.track && s.track.kind === 'video');
-          if (sender) {
-            sender.replaceTrack(screenTrack);
-          }
-        });
-
-        localVideoRef.current.srcObject = stream;
-        toast.success("Screen sharing started", { autoClose: 1500 });
-
-        screenTrack.onended = () => {
-          toggleScreenShare();
-        };
-      } catch (error) {
-        console.error("Error sharing screen:", error);
-        toast.error("Failed to share screen");
-      }
-    }
-  };
 
   const formatTime = (timestamp) => {
     return new Date(timestamp).toLocaleTimeString('en-US', {
@@ -487,224 +174,272 @@ const handleICECandidate = async ({ candidate, from }) => {
     <div
       className="min-h-screen flex flex-col"
       style={{
-        background: COLORS.bg,
+        background: theme.colors.background,
+        fontFamily: theme.typography.fontFamily,
       }}
     >
-      <ToastContainer position="top-right" theme="dark" />
+      <ToastContainer position="top-right" theme={theme.name === 'dark' ? 'dark' : 'light'} />
+
       {/* Header */}
       <div
-        className="py-4 px-4 sm:px-6 shadow-lg"
+        className="border-b flex items-center justify-between px-4 py-2"
         style={{
-          background: COLORS.card,
-          borderBottom: `2px solid ${COLORS.border}`,
+          background: theme.colors.surface,
+          borderColor: theme.colors.border,
+          boxShadow: theme.colors.shadow,
         }}
       >
-        <div className="container mx-auto flex items-center justify-between">
-          <div className="flex items-center">
-            <div
-              className="h-12 w-12 rounded-xl flex items-center justify-center shadow-md"
+        <div className="flex items-center gap-3">
+          <FaVideo className="h-6 w-6 text-white bg-blue-500 rounded-lg p-1" />
+          <div>
+            <h1
+              className="text-lg font-bold"
               style={{
-                background: COLORS.bg,
-                border: `2px solid ${COLORS.border}`,
+                color: theme.colors.textPrimary,
+                fontWeight: theme.typography.headingWeight,
               }}
             >
-              <Video className="h-6 w-6" style={{ color: COLORS.accent2 }} />
+              {roomName || "Chat Room"}
+            </h1>
+            <div className="flex items-center gap-2">
+              <div
+                className="h-2 w-2 rounded-full"
+                style={{ background: theme.colors.success }}
+              />
+              <span className="text-xs" style={{ color: theme.colors.textSecondary }}>
+                {roomData?.participants?.length || 0} online
+              </span>
             </div>
-            <div className="ml-4">
-              <h1
-                className="text-xl sm:text-2xl font-bold"
-                style={{
-                  color: COLORS.accent,
-                  letterSpacing: "-0.01em",
-                }}
-              >
-                {roomName || "Chat Room"}
-              </h1>
-              <p className="text-sm" style={{ color: COLORS.muted }}>
-                {roomData?.participants?.length || 0} participants
-              </p>
-            </div>
-          </div>
-          <div className="flex items-center space-x-2 sm:space-x-3">
-            {!isVideoCallActive ? (
-              <button
-                onClick={startVideoCall}
-                className="px-3 sm:px-4 py-2 rounded-lg text-sm font-semibold shadow-md hover:shadow-lg transition-all duration-200 flex items-center"
-                style={{
-                  background: COLORS.accent,
-                  color: COLORS.textLight,
-                }}
-              >
-                <Phone className="w-4 h-4 mr-1 sm:mr-2" />
-                <span className="hidden sm:inline">Start Call</span>
-                <span className="sm:hidden">Call</span>
-              </button>
-            ) : (
-              <button
-                onClick={endVideoCall}
-                className="px-3 sm:px-4 py-2 rounded-lg text-sm font-semibold shadow-md hover:shadow-lg transition-all duration-200 flex items-center"
-                style={{
-                  background: "#E74C3C",
-                  color: COLORS.textLight,
-                }}
-              >
-                <PhoneOff className="w-4 h-4 mr-1 sm:mr-2" />
-                <span className="hidden sm:inline">End Call</span>
-                <span className="sm:hidden">End</span>
-              </button>
-            )}
-            <button
-              onClick={() => navigate(`/room/${roomId}/files`)}
-              className="px-3 sm:px-4 py-2 rounded-lg text-sm font-semibold shadow-md hover:shadow-lg transition-all duration-200 flex items-center"
-              style={{
-                background: COLORS.accent,
-                color: COLORS.textLight,
-              }}
-            >
-              <Upload className="w-4 h-4 mr-1 sm:mr-2" />
-              <span className="hidden sm:inline">Files</span>
-            </button>
-            <button
-              onClick={leaveRoom}
-              className="px-3 sm:px-4 py-2 rounded-lg text-sm font-semibold shadow-md hover:shadow-lg transition-all duration-200 flex items-center border"
-              style={{
-                background: "transparent",
-                color: COLORS.accent,
-                border: `1px solid ${COLORS.border}`,
-              }}
-            >
-              <LogOut className="w-4 h-4 mr-1 sm:mr-2" />
-              <span className="hidden sm:inline">Leave</span>
-            </button>
           </div>
         </div>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={toggleTheme}
+            className="p-2 rounded-lg border"
+            style={{
+              background: theme.colors.surface,
+              color: theme.colors.textPrimary,
+              borderColor: theme.colors.border,
+            }}
+            title="Toggle theme"
+          >
+            {theme.name === "dark" ? <FaSun /> : <FaMoon />}
+          </button>
+          {!isVideoCallActive ? (
+            <button
+              onClick={startVideoCall}
+              className="px-3 py-2 rounded-lg font-semibold flex items-center gap-2"
+              style={{
+                background: theme.colors.accentCool,
+                color: "white",
+                boxShadow: theme.colors.shadow,
+                fontSize: "14px"
+              }}
+            >
+              <FaPhone />
+              <span className="hidden sm:inline">Call</span>
+            </button>
+          ) : (
+            <button
+              onClick={endVideoCall}
+              className="px-3 py-2 rounded-lg font-semibold flex items-center gap-2"
+              style={{
+                background: theme.colors.error,
+                color: "white",
+                boxShadow: theme.colors.shadow,
+                fontSize: "14px"
+              }}
+            >
+              <FaPhoneSlash />
+              <span className="hidden sm:inline">End</span>
+            </button>
+          )}
+          <button
+            onClick={() => navigate(`/room/${roomId}/files`)}
+            className="px-3 py-2 rounded-lg font-semibold flex items-center gap-2"
+            style={{
+              background: theme.colors.surface,
+              color: theme.colors.textPrimary,
+              border: `1px solid ${theme.colors.border}`,
+              fontSize: "14px"
+            }}
+          >
+            <FaFileUpload />
+            <span className="hidden sm:inline">Files</span>
+          </button>
+          <button
+            onClick={leaveRoom}
+            className="px-3 py-2 rounded-lg font-semibold flex items-center gap-2"
+            style={{
+              background: "transparent",
+              color: theme.colors.error,
+              border: `1px solid ${theme.colors.error}`,
+              fontSize: "14px"
+            }}
+          >
+            <FaSignOutAlt />
+            <span className="hidden md:inline">Leave</span>
+          </button>
+        </div>
       </div>
-      <div className="flex-1 flex flex-col lg:flex-row">
+
+      <div className="flex-1 flex flex-col lg:flex-row overflow-hidden">
         {/* Video Call Area */}
         {isVideoCallActive && (
           <div
-            className="w-full lg:w-2/3 p-4 sm:p-6 border-b-2 lg:border-b-0 lg:border-r-2"
+            className="w-full lg:w-2/3 px-4 py-3 border-b lg:border-b-0 lg:border-r"
             style={{
-              background: COLORS.bg,
-              borderColor: COLORS.border,
+              background: theme.colors.background,
+              borderColor: theme.colors.border,
             }}
           >
-            {/* Video Controls */}
-              <div className="flex justify-center space-x-4 sm:space-x-6 m-6">
-                <button
-                  onClick={toggleMic}
-                  className="p-3 sm:p-4 rounded-full shadow-lg transition-all duration-200 hover:scale-110"
+            {/* Video Grid */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 h-[calc(100%-56px)] overflow-y-auto">
+              {/* Local Video */}
+              <div
+                className="relative rounded-xl overflow-hidden transition-transform hover:scale-[1.01] cursor-pointer group"
+                style={{
+                  background: theme.colors.surface,
+                  border: `1px solid ${theme.colors.border}`,
+                  boxShadow: theme.colors.shadow,
+                }}
+              >
+                <video
+                  ref={localVideoRef}
+                  autoPlay
+                  playsInline
+                  muted
+                  className="w-full h-full object-cover"
+                  onClick={() => handleVideoClick(localVideoRef.current)}
+                />
+                <div className="absolute top-2 left-2 px-2 py-1 rounded bg-opacity-80"
                   style={{
-                    background: isMicEnabled ? COLORS.accent : "#E74C3C",
-                    color: COLORS.textLight,
+                    background: theme.colors.surface,
                   }}
                 >
-                  {isMicEnabled ? <Mic className="w-5 h-5" /> : <MicOff className="w-5 h-5" />}
-                </button>
+                  <span className="text-xs font-semibold" style={{ color: theme.colors.textPrimary }}>
+                    You {isScreenSharing ? '(Screen)' : ''}
+                  </span>
+                </div>
                 <button
-                  onClick={toggleCamera}
-                  className="p-3 sm:p-4 rounded-full shadow-lg transition-all duration-200 hover:scale-110"
+                  onClick={() => handleVideoClick(localVideoRef.current)}
+                  className="absolute top-2 right-2 p-1 rounded opacity-0 group-hover:opacity-100 transition-opacity"
                   style={{
-                    background: isCameraEnabled ? COLORS.accent : "#E74C3C",
-                    color: COLORS.textLight,
+                    background: theme.colors.surface,
                   }}
                 >
-                  {isCameraEnabled ? <Camera className="w-5 h-5" /> : <VideoOff className="w-5 h-5" />}
-                </button>
-                <button
-                  onClick={toggleScreenShare}
-                  className="p-3 sm:p-4 rounded-full shadow-lg transition-all duration-200 hover:scale-110 border"
-                  style={{
-                    background: isScreenSharing ? COLORS.accent2 : COLORS.accent,
-                    color: isScreenSharing ? COLORS.accent : COLORS.textLight,
-                    border: `1px solid ${COLORS.accent}`,
-                  }}
-                >
-                  <Monitor className="w-5 h-5" />
+                  <FaExpand style={{ color: theme.colors.textPrimary }} />
                 </button>
               </div>
-            <div className="h-full flex flex-col">
-              <div className="flex-1 flex gap-4 sm:gap-6 flex-wrap justify-center content-start">
-                {/* Local Video */}
+
+              {/* Remote Videos */}
+              {remoteUserIds.filter(id => id !== userId).map((remoteUserId) => (
                 <div
-                  className="relative w-48 h-32 sm:w-64 sm:h-40 rounded-xl overflow-hidden shadow-lg transition-transform hover:scale-105 cursor-pointer"
+                  key={remoteUserId}
+                  className="relative rounded-xl overflow-hidden transition-transform hover:scale-[1.01] cursor-pointer group"
                   style={{
-                    background: COLORS.card,
-                    border: `2px solid ${COLORS.border}`,
+                    background: theme.colors.surface,
+                    border: `1px solid ${theme.colors.border}`,
+                    boxShadow: theme.colors.shadow,
                   }}
                 >
                   <video
-                    ref={localVideoRef}
+                    ref={el => remoteVideoRefs.current[remoteUserId] = el}
                     autoPlay
                     playsInline
-                    muted
                     className="w-full h-full object-cover"
-                    onClick={() => handleVideoClick(localVideoRef.current)}
+                    onClick={() => handleVideoClick(remoteVideoRefs.current[remoteUserId])}
                   />
-                  <div className="absolute bottom-0 left-0 right-0 p-3"
-                  >
-                    <span className="text-xs font-semibold" style={{ color: COLORS.accent }}>
-                      You {isScreenSharing ? '(Screen)' : ''}
-                    </span>
-                  </div>
-                </div>
-                {/* Remote Videos */}
-                {remoteUserIds.filter(id => id !== userId).map((remoteUserId) => (
-                  <div
-                    key={remoteUserId}
-                    className="relative w-48 h-32 sm:w-64 sm:h-40 rounded-xl overflow-hidden shadow-lg transition-transform hover:scale-105 cursor-pointer"
+                  <div className="absolute top-2 left-2 px-2 py-1 rounded bg-opacity-80"
                     style={{
-                      background: COLORS.card,
-                      border: `2px solid ${COLORS.border}`,
+                      background: theme.colors.surface,
                     }}
                   >
-                    <video
-                      ref={el => remoteVideoRefs.current[remoteUserId] = el}
-                      autoPlay
-                      playsInline
-                      className="w-full h-full object-cover"
-                      onClick={() => handleVideoClick(remoteVideoRefs.current[remoteUserId])}
-                    />
-                    <div className="absolute bottom-0 left-0 right-0 p-3"
-                    >
-                      <span className="text-xs font-semibold" style={{ color: COLORS.accent }}>
-                        {remoteUsers[remoteUserId] || remoteUserId}
-                      </span>
-                    </div>
+                    <span className="text-xs font-semibold flex items-center gap-1" style={{ color: theme.colors.textPrimary }}>
+                      <FaUserCircle />
+                      <span>{remoteUsers[remoteUserId] || remoteUserId}</span>
+                    </span>
                   </div>
-                ))}
-              </div>
-              
+                  <button
+                    onClick={() => handleVideoClick(remoteVideoRefs.current[remoteUserId])}
+                    className="absolute top-2 right-2 p-1 rounded opacity-0 group-hover:opacity-100 transition-opacity"
+                    style={{
+                      background: theme.colors.surface,
+                    }}
+                  >
+                    <FaExpand style={{ color: theme.colors.textPrimary }} />
+                  </button>
+                </div>
+              ))}
+            </div>
+            {/* Video Controls - below video grid */}
+            <div className="flex justify-center gap-3 mt-3">
+              <button
+                onClick={toggleMic}
+                className="p-2 rounded-full transition-all duration-200"
+                style={{
+                  background: isMicEnabled ? theme.colors.accentCool : theme.colors.error,
+                  color: "white",
+                  boxShadow: theme.colors.shadow,
+                }}
+                title={isMicEnabled ? "Mute Mic" : "Unmute Mic"}
+              >
+                {isMicEnabled ? <FaMicrophone /> : <FaMicrophoneSlash />}
+              </button>
+              <button
+                onClick={toggleCamera}
+                className="p-2 rounded-full transition-all duration-200"
+                style={{
+                  background: isCameraEnabled ? theme.colors.accentCool : theme.colors.error,
+                  color: "white",
+                  boxShadow: theme.colors.shadow,
+                }}
+                title={isCameraEnabled ? "Turn Off Camera" : "Turn On Camera"}
+              >
+                {isCameraEnabled ? <FaVideo /> : <FaVideoSlash />}
+              </button>
+              <button
+                onClick={toggleScreenShare}
+                className="p-2 rounded-full transition-all duration-200"
+                style={{
+                  background: isScreenSharing ? theme.colors.accentWarm : theme.colors.surface,
+                  color: isScreenSharing ? "white" : theme.colors.textPrimary,
+                  border: `1px solid ${theme.colors.border}`,
+                  boxShadow: theme.colors.shadow,
+                }}
+                title={isScreenSharing ? "Stop Sharing" : "Share Screen"}
+              >
+                <FaDesktop />
+              </button>
             </div>
           </div>
         )}
+
         {/* Chat Area */}
         <div className={`${isVideoCallActive ? 'w-full lg:w-1/3' : 'w-full'} flex flex-col`}>
           {/* Messages */}
-          <div className="flex-1 p-4 sm:p-6 overflow-y-auto"
-            style={{
-              background: COLORS.bg,
-            }}
-          >
-            <div className="space-y-4 overflow-y-auto">
+          <div className="flex-1 px-4 py-3 overflow-y-auto">
+            <div className="space-y-3">
               {messages.map((msg, index) => (
                 <div
                   key={msg._id || index}
                   className={`flex ${msg.userId === userId ? 'justify-end' : 'justify-start'}`}
                 >
                   <div
-                    className={`max-w-xs sm:max-w-sm lg:max-w-md px-4 py-3 rounded-xl shadow-md`}
+                    className="max-w-xs lg:max-w-md px-3 py-2 rounded-xl"
                     style={{
-                      background: msg.userId === userId ? COLORS.myMessage : COLORS.card,
-                      color: msg.userId === userId ? COLORS.textLight : COLORS.text,
-                      border: `1px solid ${COLORS.border}`,
+                      background: msg.userId === userId
+                        ? theme.colors.accentCool
+                        : theme.colors.surface,
+                      color: msg.userId === userId ? "white" : theme.colors.textPrimary,
+                      boxShadow: theme.colors.shadow,
                     }}
                   >
-                    <div className="flex items-center justify-between mb-1">
-                      <span className="text-xs font-semibold opacity-80" style={{ color: msg.userId === userId ? COLORS.accent2 : COLORS.accent }}>
+                    <div className="flex items-center justify-between mb-0.5">
+                      <span className="text-xs font-semibold opacity-80">
                         {msg.userName || msg.sender}
                       </span>
-                      <span className="text-xs opacity-60 p-2" style={{ color: msg.userId === userId ? COLORS.accent2 : COLORS.muted }}>
+                      <span className="text-xs opacity-60 ml-2">
                         {formatTime(msg.timestamp || msg.createdAt)}
                       </span>
                     </div>
@@ -715,45 +450,57 @@ const handleICECandidate = async ({ candidate, from }) => {
               <div ref={messagesEndRef} />
             </div>
           </div>
+
           {/* Message Input */}
           <div
-            className="p-4 sm:p-6 shadow-lg"
+            className="px-4 py-2 border-t"
             style={{
-              borderTop: `2px solid ${COLORS.border}`,
-              background: COLORS.card,
+              background: theme.colors.surface,
+              borderColor: theme.colors.border,
             }}
           >
-            <div className="flex space-x-3">
+            <div className="flex gap-2">
               <input
                 type="text"
                 value={message}
                 onChange={(e) => setMessage(e.target.value)}
                 onKeyPress={(e) => e.key === 'Enter' && sendMessage()}
-                className="flex-1 px-4 py-3 rounded-lg border transition-all duration-200 focus:ring-2 focus:ring-blue-200"
+                className="flex-1 px-3 py-2 rounded-lg transition-all duration-200"
                 style={{
-                  background: "rgba(12, 24, 68, 0.02)",
-                  color: COLORS.text,
-                  border: `1px solid rgba(12, 24, 68, 0.2)`,
+                  background: theme.colors.inputBackground,
+                  color: theme.colors.textPrimary,
+                  border: `1px solid ${theme.colors.border}`,
+                  fontSize: "15px"
                 }}
                 placeholder="Type a message..."
               />
               <button
                 onClick={sendMessage}
-                className="px-6 py-3 rounded-lg font-semibold shadow-md hover:shadow-lg transition-all duration-200"
+                className="px-4 py-2 rounded-lg font-semibold flex items-center gap-2 transition-all duration-200"
                 style={{
-                  background: COLORS.accent,
-                  color: COLORS.textLight,
+                  background: theme.colors.accentCool,
+                  color: "white",
+                  boxShadow: theme.colors.shadow,
+                  fontSize: "15px"
                 }}
               >
-                Send
+                <FaPaperPlane />
+                <span className="hidden sm:inline">Send</span>
               </button>
             </div>
           </div>
         </div>
       </div>
+
       {/* Full Screen Video Modal */}
-      {(isFullScreen && fullScreenVideoSrc) && (
-        <div className="fixed inset-0 bg-black bg-opacity-90 flex items-center justify-center z-50" onClick={closeFullScreen}>
+      {isFullScreen && fullScreenVideoSrc && (
+        <div className="fixed inset-0 bg-black bg-opacity-95 flex items-center justify-center z-50">
+          <button
+            onClick={closeFullScreen}
+            className="absolute top-4 right-4 p-3 rounded-full bg-white bg-opacity-20 hover:bg-opacity-30 transition-all"
+          >
+            <FaTimes className="text-white text-xl" />
+          </button>
           {fullScreenVideoSrc instanceof MediaStream ? (
             <video
               ref={el => {
@@ -777,6 +524,6 @@ const handleICECandidate = async ({ candidate, from }) => {
       )}
     </div>
   );
-}
+};
 
 export default Chat;
