@@ -21,6 +21,7 @@ import {
   FiUser,
 } from "react-icons/fi";
 import DrawingCanvas from "./DrawingCanvas";
+import VideoHandDraw from "./VideoHandDraw";
 
 const Chat = () => {
   const { roomId } = useParams();
@@ -661,6 +662,7 @@ const Chat = () => {
         )}
       </div>
       <DrawingCanvas />
+      <VideoHandDraw roomId={roomId} />
     </div>
   );
 };

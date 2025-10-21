@@ -104,6 +104,23 @@ io.on('connection', (socket) => {
     // Broadcast clear command to all OTHER users in the room
     socket.to(roomId).emit('clearCanvas');
   });
+
+  socket.on('hand-draw', (data) => {
+    // Broadcast the FULL drawing data to all others in the room
+    socket.to(data.roomId).emit('hand-draw', {
+      x: data.x,
+      y: data.y,
+      prev: data.prev,
+      color: data.color,
+      size: data.size,
+      eraser: data.eraser
+    });
+  });
+
+  socket.on('clear-canvas', ({ roomId }) => {
+    // Broadcast clear command to all OTHER users in the room
+    socket.to(roomId).emit('clear-canvas');
+  });
   
 
   // Video call functionality
