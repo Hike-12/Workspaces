@@ -60,11 +60,23 @@ const darkTheme = {
 
 // 🌗 Theme Provider
 export const ThemeProvider = ({ children }) => {
-  const [theme, setTheme] = useState(lightTheme);
 
-  const toggleTheme = () => {
-    setTheme(theme.name === "light" ? darkTheme : lightTheme);
+  const getInitialTheme = () => {
+    const stored = localStorage.getItem("theme");
+    if (stored === "dark") return darkTheme;
+    if (stored === "light") return lightTheme;
+    return lightTheme;
   };
+
+  const [theme, setTheme] = useState(getInitialTheme);
+
+  // 2. Save theme to localStorage on change
+  const toggleTheme = () => {
+    const newTheme = theme.name === "light" ? darkTheme : lightTheme;
+    setTheme(newTheme);
+    localStorage.setItem("theme", newTheme.name);
+  };
+
 
   return (
     <ThemeContext.Provider value={{ theme, toggleTheme }}>

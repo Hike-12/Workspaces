@@ -90,6 +90,22 @@ io.on('connection', (socket) => {
     io.to(room_id).emit('receiveMessage', messageData);
   });
 
+  socket.on('draw', (data) => {
+    // Broadcast the full drawing data object to all others in the room
+    socket.to(data.roomId).emit('draw', data);
+  });
+
+  socket.on('syncCanvas', ({ roomId, image }) => {
+    // Broadcast canvas sync to all OTHER users in the room
+    socket.to(roomId).emit('syncCanvas', { image });
+  });
+
+  socket.on('clearCanvas', ({ roomId }) => {
+    // Broadcast clear command to all OTHER users in the room
+    socket.to(roomId).emit('clearCanvas');
+  });
+  
+
   // Video call functionality
   socket.on('joinCall', ({ roomId, userId, userName }) => {
     const room = userCalls.get(roomId) || new Map();
