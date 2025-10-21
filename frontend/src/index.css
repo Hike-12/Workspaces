@@ -1,1 +1,12 @@
 @import "tailwindcss";
+
+@font-face {
+  font-family: 'Rothek';
+  src: url('/fonts/trial-rothek-black.otf') format('opentype');
+  font-weight: 400;
+  font-style: normal;
+}
+
+html, body, #root, * {
+  font-family: 'Rothek', 'Inter', 'Poppins', Arial, sans-serif !important;
+}
