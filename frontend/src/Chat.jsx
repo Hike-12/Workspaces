@@ -266,17 +266,23 @@ const endVideoCall = () => {
     const pc = new RTCPeerConnection({
       iceServers: [
         { urls: "stun:stun.l.google.com:19302" },
+        { urls: "stun:stun1.l.google.com:19302" },
         { urls: "turn:relay1.expressturn.com:3478", username: "efrelayusername", credential: "efrelaypassword" },
         { urls: "turn:a.relay.metered.ca:80", username: "openrelayproject", credential: "openrelayproject" },
         { urls: "turn:a.relay.metered.ca:443", username: "openrelayproject", credential: "openrelayproject" },
-      ]
+      ],
+      iceCandidatePoolSize: 10
     });
     peerConnections.current[remoteUserId] = pc;
 
     // add local tracks
-    localStreamRef.current.getTracks().forEach(track => {
-      pc.addTrack(track, localStreamRef.current);
-    });
+    if (localStreamRef.current) {
+      localStreamRef.current.getTracks().forEach(track => {
+        pc.addTrack(track, localStreamRef.current);
+      });
+    } else {
+      console.error("No local stream available when creating peer connection!");
+    }
 
     // send our ICE
     pc.onicecandidate = e => {
@@ -298,58 +304,87 @@ const endVideoCall = () => {
     // Connection state monitoring
     pc.onconnectionstatechange = () => {
       console.log(`Connection state with ${remoteUserId}:`, pc.connectionState);
+      if (pc.connectionState === 'failed' || pc.connectionState === 'disconnected') {
+        console.error(`Connection ${pc.connectionState} with ${remoteUserId}`);
+      }
     };
 
     pc.oniceconnectionstatechange = () => {
       console.log(`ICE connection state with ${remoteUserId}:`, pc.iceConnectionState);
+      if (pc.iceConnectionState === 'failed') {
+        console.error(`ICE connection failed with ${remoteUserId}`);
+        // Try to restart ICE
+        if (pc.restartIce) {
+          console.log(`Attempting to restart ICE for ${remoteUserId}`);
+          pc.restartIce();
+        }
+      }
+    };
+
+    pc.onicegatheringstatechange = () => {
+      console.log(`ICE gathering state with ${remoteUserId}:`, pc.iceGatheringState);
     };
 
     return pc;
   };
 
   const handleUserJoined = async (remoteUserId) => {
-    if (!localStreamRef.current) return;
+    if (!localStreamRef.current) {
+      console.warn("Cannot handle user joined - no local stream yet");
+      return;
+    }
+    console.log("📞 Creating offer for newly joined user:", remoteUserId);
     const pc = createPeerConnection(remoteUserId);
-    const offer = await pc.createOffer();
-    await pc.setLocalDescription(offer);
-    socketRef.current.emit("offer", { offer, to: remoteUserId });
+    try {
+      const offer = await pc.createOffer();
+      await pc.setLocalDescription(offer);
+      socketRef.current.emit("offer", { offer, to: remoteUserId });
+      console.log("✅ Sent offer to", remoteUserId);
+    } catch (err) {
+      console.error("❌ Error creating offer for", remoteUserId, err);
+    }
   };
 
   const handleOffer = async ({ offer, from }) => {
     if (!isVideoCallActiveRef.current || !localStreamRef.current) {
-      console.log("Ignoring offer from", from, "- call not active");
+      console.log("Ignoring offer from", from, "- call not active or no local stream");
       return;
     }
     
+    console.log("📥 Received offer from", from);
     const pc = createPeerConnection(from);
 
-    // Handle signaling state conflicts
-    if (pc.signalingState !== "stable") {
-      console.log("Signaling state not stable, rolling back...");
-      await Promise.all([
-        pc.setLocalDescription({type: "rollback"}),
-        pc.setRemoteDescription(new RTCSessionDescription(offer))
-      ]);
-    } else {
-      await pc.setRemoteDescription(new RTCSessionDescription(offer));
-    }
-    
-    const answer = await pc.createAnswer();
-    await pc.setLocalDescription(answer);
-    socketRef.current.emit("answer", { answer, to: from });
-    console.log("✅ Sent answer to", from);
-    
-    // Process pending ICE candidates
-    if (pendingCandidates.current[from]?.length > 0) {
-      console.log(`Processing ${pendingCandidates.current[from].length} pending candidates for`, from);
-      for (const candidate of pendingCandidates.current[from]) {
-        try {
-          await pc.addIceCandidate(new RTCIceCandidate(candidate));
-        } catch (e) {
-          console.warn("Failed to add pending candidate:", e);
-        }
+    try {
+      // Handle signaling state conflicts
+      if (pc.signalingState !== "stable") {
+        console.log("Signaling state not stable, rolling back...");
+        await pc.setLocalDescription({type: "rollback"});
       }
-      pendingCandidates.current[from] = [];
+      
+      await pc.setRemoteDescription(new RTCSessionDescription(offer));
+      console.log("✅ Set remote offer from", from);
+      
+      const answer = await pc.createAnswer();
+      await pc.setLocalDescription(answer);
+      socketRef.current.emit("answer", { answer, to: from });
+      console.log("✅ Sent answer to", from);
+      
+      // Process pending ICE candidates AFTER both descriptions are set
+      if (pendingCandidates.current[from]?.length > 0) {
+        console.log(`Processing ${pendingCandidates.current[from].length} pending candidates for`, from);
+        for (const candidate of pendingCandidates.current[from]) {
+          try {
+            await pc.addIceCandidate(new RTCIceCandidate(candidate));
+          } catch (e) {
+            console.warn("Failed to add pending candidate:", e);
+          }
+        }
+        pendingCandidates.current[from] = [];
+      }
+    } catch (err) {
+      console.error("❌ Error handling offer from", from, err);
+      pc.close();
+      delete peerConnections.current[from];
     }
   };
 
