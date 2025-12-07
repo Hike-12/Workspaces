@@ -36,6 +36,18 @@ export default function VideoHandDraw({ roomId = "default-room", onClose }) {
   const [showVideo, setShowVideo] = useState(true);
   const [minimized, setMinimized] = useState(false);
 
+  // Refs to hold current state values for the closure
+  const selectedColorRef = useRef(selectedColor);
+  const brushSizeRef = useRef(brushSize);
+  const isEraserRef = useRef(isEraser);
+
+  // Sync refs with state
+  useEffect(() => {
+    selectedColorRef.current = selectedColor;
+    brushSizeRef.current = brushSize;
+    isEraserRef.current = isEraser;
+  }, [selectedColor, brushSize, isEraser]);
+
   // Clear drawing buffers when color changes
   const clearDrawingState = () => {
     smoothingBufferRef.current = [];
@@ -136,14 +148,14 @@ export default function VideoHandDraw({ roomId = "default-room", onClose }) {
             if (distance < 100) {
               ctx.lineCap = "round";
               ctx.lineJoin = "round";
-              if (isEraser) {
+              if (isEraserRef.current) {
                 ctx.globalCompositeOperation = "destination-out";
                 ctx.strokeStyle = "rgba(0,0,0,1)";
-                ctx.lineWidth = brushSize * 3;
+                ctx.lineWidth = brushSizeRef.current * 3;
               } else {
                 ctx.globalCompositeOperation = "source-over";
-                ctx.strokeStyle = selectedColor;
-                ctx.lineWidth = brushSize;
+                ctx.strokeStyle = selectedColorRef.current;
+                ctx.lineWidth = brushSizeRef.current;
               }
               ctx.beginPath();
               ctx.moveTo(lastPointRef.current.x, lastPointRef.current.y);
@@ -154,9 +166,9 @@ export default function VideoHandDraw({ roomId = "default-room", onClose }) {
                 x,
                 y,
                 prev: lastPointRef.current,
-                color: selectedColor,
-                size: brushSize,
-                eraser: isEraser
+                color: selectedColorRef.current,
+                size: brushSizeRef.current,
+                eraser: isEraserRef.current
               });
             }
           }
