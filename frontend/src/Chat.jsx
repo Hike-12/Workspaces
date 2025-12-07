@@ -260,13 +260,15 @@ const Chat = () => {
     if (peerConnections.current[remoteUserId]) {
       return peerConnections.current[remoteUserId];
     }
+    // Hardcoded free STUN + TURN (best-effort). TURN over TLS 443 preferred.
     const pc = new window.RTCPeerConnection({
       iceServers: [
         { urls: "stun:stun.l.google.com:19302" },
-        { urls: "turn:relay1.expressturn.com:3478", username: "efrelayusername", credential: "efrelaypassword" },
-        { urls: "turn:a.relay.metered.ca:80", username: "openrelayproject", credential: "openrelayproject" },
         { urls: "turn:a.relay.metered.ca:443", username: "openrelayproject", credential: "openrelayproject" },
-      ]
+        { urls: "turn:a.relay.metered.ca:80", username: "openrelayproject", credential: "openrelayproject" },
+        { urls: "turn:relay1.expressturn.com:3478", username: "efrelayusername", credential: "efrelaypassword" }
+      ],
+      iceTransportPolicy: "relay" // force relay-only for cross-network reliability
     });
     peerConnections.current[remoteUserId] = pc;
 
