@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { API_ENDPOINTS, cn } from "./lib/utils";
-import { Users, Video, MessageCircle, Upload, Moon, Sun, ArrowRight, LayoutGrid, ShieldCheck } from "lucide-react";
+import { Users, Video, MessageCircle, Upload, Moon, Sun, ArrowRight, LayoutGrid, ShieldCheck, HelpCircle, X } from "lucide-react";
 import { ToastContainer, toast } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
 import { v4 as uuidv4 } from "uuid";
@@ -20,6 +20,7 @@ const Home = () => {
   });
   const [isCreating, setIsCreating] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [showHelp, setShowHelp] = useState(false);
 
   useEffect(() => {
     if (!localStorage.getItem("userId")) {
@@ -118,13 +119,49 @@ const Home = () => {
           </div>
           <span className="font-serif text-xl font-bold tracking-tight">Workspaces</span>
         </div>
-        <button
-          onClick={toggleTheme}
-          className="p-2 rounded-full hover:bg-bg-surface border border-transparent hover:border-border-subtle transition-all duration-200"
-        >
-          {theme === "dark" ? <Sun size={20} /> : <Moon size={20} />}
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setShowHelp(true)}
+            className="p-2 rounded-full hover:bg-bg-surface border border-transparent hover:border-border-subtle transition-all duration-200"
+            title="Help"
+          >
+            <HelpCircle size={20} />
+          </button>
+          <button
+            onClick={toggleTheme}
+            className="p-2 rounded-full hover:bg-bg-surface border border-transparent hover:border-border-subtle transition-all duration-200"
+            title="Toggle theme"
+          >
+            {theme === "dark" ? <Sun size={20} /> : <Moon size={20} />}
+          </button>
+        </div>
       </nav>
+      {/* Help Modal */}
+      {showHelp && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+          <div className="bg-bg-surface rounded-2xl shadow-xl p-8 max-w-md w-full relative border border-border-subtle">
+            <button
+              onClick={() => setShowHelp(false)}
+              className="absolute top-4 right-4 p-2 rounded-full hover:bg-bg-canvas text-fg-secondary"
+              title="Close"
+            >
+              <X size={22} />
+            </button>
+            <h2 className="font-serif text-2xl font-semibold mb-4 flex items-center gap-2">
+              <HelpCircle size={22} /> Help
+            </h2>
+            <div className="text-base leading-relaxed space-y-3">
+              <div>
+                For testing purposes, you can use the following credentials:<br />
+                <strong>Join room:</strong> Room name is <b>Test</b>, Password is <b>123</b>.
+              </div>
+              <div>
+                The project is hosted on <b>Render</b> so it will take 30 - 45 seconds to start.
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       <main className="max-w-7xl mx-auto px-6 py-12 lg:py-20 grid lg:grid-cols-12 gap-12 items-start">
         
