@@ -18,7 +18,6 @@ import {
   FileText,
   Monitor,
   X,
-  User,
   Phone,
   PhoneOff,
   LayoutGrid,
@@ -40,28 +39,26 @@ const Chat = () => {
   const [message, setMessage] = useState("");
   const [roomData, setRoomData] = useState(null);
 
-  // Video call states
+  // Video call states (from old logic)
   const [isVideoCallActive, setIsVideoCallActive] = useState(false);
   const [remoteUserIds, setRemoteUserIds] = useState([]);
-  const [remoteUsers, setRemoteUsers] = useState({});
   const [isCameraEnabled, setIsCameraEnabled] = useState(true);
   const [isScreenSharing, setIsScreenSharing] = useState(false);
   const [screenStream, setScreenStream] = useState(null);
   const [isMicEnabled, setIsMicEnabled] = useState(true);
   const [isFullScreen, setIsFullScreen] = useState(false);
   const [fullScreenVideoSrc, setFullScreenVideoSrc] = useState(null);
+  const [remoteUsers, setRemoteUsers] = useState({});
   const [showHandDraw, setShowHandDraw] = useState(false);
 
-  // Refs
+  // Refs (from old logic)
   const messagesEndRef = useRef(null);
   const socketRef = useRef(null);
   const localVideoRef = useRef(null);
   const localStreamRef = useRef(null);
   const peerConnections = useRef({});
   const remoteVideoRefs = useRef({});
-  const remoteStreams = useRef({});
   const isVideoCallActiveRef = useRef(false);
-  const iceCandidateQueue = useRef({});
 
   useEffect(() => {
     const token = localStorage.getItem("token");
@@ -70,7 +67,6 @@ const Chat = () => {
       return;
     }
   }, [userName, roomId, userId, navigate]);
-
   const leaveRoom = async () => {
     try {
       await fetch(API_ENDPOINTS.LEAVE_ROOM, {
@@ -90,11 +86,12 @@ const Chat = () => {
     navigate('/');
   };
 
+  // Auto-scroll to bottom of messages
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
-  // --- SOCKET & WEBRTC LOGIC ---
+  // Initialize socket connection & WebRTC events (old logic)
   useEffect(() => {
     socketRef.current = io(SOCKET_URL);
 
@@ -111,19 +108,16 @@ const Chat = () => {
       toast.error(data.message);
     });
 
-    // WebRTC event listeners - moved here to avoid dependency issues
     socketRef.current.on("userJoined", ({ userId: remoteUserId, userName: remoteUserName }) => {
-      // console.log("User joined:", remoteUserId, "Current video call active:", isVideoCallActiveRef.current);
       setRemoteUserIds(prev => prev.includes(remoteUserId) ? prev : [...prev, remoteUserId]);
       setRemoteUsers(prev => ({ ...prev, [remoteUserId]: remoteUserName }));
-      
-      // Only create peer connection if video call is active at the time
+
       setTimeout(() => {
         if (isVideoCallActiveRef.current && localStreamRef.current) {
           handleUserJoined(remoteUserId);
         }
       }, 100);
-      
+
       toast.info(`${remoteUserName || remoteUserId} joined the call or room`);
     });
 
@@ -142,8 +136,6 @@ const Chat = () => {
     });
 
     socketRef.current.on("existingParticipants", async ({ participants }) => {
-      // console.log("Existing participants:", participants);
-
       const newUserIds = participants
         .map(p => p.userId)
         .filter(id => id !== userId);
@@ -161,7 +153,7 @@ const Chat = () => {
         return updated;
       });
     });
-    
+
     socketRef.current.on("offer", handleOffer);
     socketRef.current.on("answer", handleAnswer);
     socketRef.current.on("ice-candidate", handleICECandidate);
@@ -193,17 +185,16 @@ const Chat = () => {
     fetchData();
   }, [roomId]);
 
-  // --- VIDEO CALL LOGIC ---
+  // Set video source when call becomes active (old logic)
   useEffect(() => {
     if (isVideoCallActive && localStreamRef.current && localVideoRef.current) {
       localVideoRef.current.srcObject = localStreamRef.current;
     }
   }, [isVideoCallActive]);
 
+  // --- Video call handlers from old logic ---
   const startVideoCall = async () => {
     try {
-      // console.log("Starting video call with existing users:", remoteUserIds);
-
       if (!localStreamRef.current) {
         localStreamRef.current = await navigator.mediaDevices.getUserMedia({
           video: true,
@@ -216,10 +207,8 @@ const Chat = () => {
 
       socketRef.current.emit("joinCall", { roomId, userId, userName });
 
-      // Always create offers to all known remote users (from existingParticipants)
       setTimeout(() => {
         const validRemoteUsers = remoteUserIds.filter(id => id !== userId);
-        // console.log("Creating connections for existing users:", validRemoteUsers);
 
         validRemoteUsers.forEach(async (remoteUserId) => {
           const pc = createPeerConnection(remoteUserId);
@@ -243,7 +232,7 @@ const Chat = () => {
   const endVideoCall = () => {
     Object.values(peerConnections.current).forEach(connection => connection.close());
     peerConnections.current = {};
-    
+
     if (localStreamRef.current) {
       localStreamRef.current.getTracks().forEach(track => track.stop());
       localStreamRef.current = null;
@@ -258,12 +247,11 @@ const Chat = () => {
     });
 
     setIsVideoCallActive(false);
-    isVideoCallActiveRef.current = false; // Set ref immediately
+    isVideoCallActiveRef.current = false;
     socketRef.current.emit("leaveCall", { roomId, userId, userName });
     toast.info("Video call ended");
   };
 
-  // 1) single factory:
   const createPeerConnection = (remoteUserId) => {
     if (peerConnections.current[remoteUserId]) {
       return peerConnections.current[remoteUserId];
@@ -278,22 +266,16 @@ const Chat = () => {
     });
     peerConnections.current[remoteUserId] = pc;
 
-    // add local tracks
-    if (localStreamRef.current) {
-      localStreamRef.current.getTracks().forEach(track => {
-        pc.addTrack(track, localStreamRef.current);
-      });
-    }
+    localStreamRef.current.getTracks().forEach(track => {
+      pc.addTrack(track, localStreamRef.current);
+    });
 
-    // send our ICE
     pc.onicecandidate = e => {
       if (e.candidate) {
-        // console.log("ICE candidate:", e.candidate.candidate);
         socketRef.current.emit("ice-candidate", { candidate: e.candidate, to: remoteUserId });
       }
     };
 
-    // attach remote
     pc.ontrack = e => {
       const el = remoteVideoRefs.current[remoteUserId];
       if (el) el.srcObject = e.streams[0];
@@ -302,7 +284,6 @@ const Chat = () => {
     return pc;
   };
 
-  // 2) on new peer:
   const handleUserJoined = async (remoteUserId) => {
     if (!localStreamRef.current) return;
     const pc = createPeerConnection(remoteUserId);
@@ -311,14 +292,11 @@ const Chat = () => {
     socketRef.current.emit("offer", { offer, to: remoteUserId });
   };
 
-  // 3) on OFFER:
   const handleOffer = async ({ offer, from }) => {
     if (!localStreamRef.current) return;
     const pc = createPeerConnection(from);
 
-    // if we've already got their SDP, don’t re-answer
     if (pc.remoteDescription) {
-      // console.log("⏩ already answered offer from", from);
       return;
     }
 
@@ -327,42 +305,35 @@ const Chat = () => {
       const answer = await pc.createAnswer();
       await pc.setLocalDescription(answer);
       socketRef.current.emit("answer", { answer, to: from });
-      // console.log("✅ answered offer from", from);
     } catch (err) {
-      console.error("❌ error handling offer:", err);
+      console.error("error handling offer:", err);
       pc.close();
       delete peerConnections.current[from];
     }
   };
 
-  // 4) on ANSWER:
   const handleAnswer = async ({ answer, from }) => {
     const pc = peerConnections.current[from];
     if (!pc) {
-      // console.log("⏩ ignore answer, no pc for", from);
       return;
     }
-    // only set once
     if (pc.remoteDescription) {
-      // console.log("⏩ remote already set for", from);
       return;
     }
     try {
       await pc.setRemoteDescription(new RTCSessionDescription(answer));
-      // console.log("✅ remote-answer set for", from);
     } catch (err) {
-      console.error("❌ failed to set remote answer:", err);
+      console.error("failed to set remote answer:", err);
     }
   };
 
-  // 5) on ICE:
   const handleICECandidate = async ({ candidate, from }) => {
     const pc = peerConnections.current[from];
     if (!pc) return;
     try {
       await pc.addIceCandidate(new RTCIceCandidate(candidate));
     } catch (e) {
-      // console.warn("ICE add failed:", e);
+      // ignore
     }
   };
 
@@ -433,6 +404,22 @@ const Chat = () => {
         toast.error("Failed to share screen");
       }
     }
+  };
+
+  const handleVideoClick = (videoElement) => {
+    if (videoElement) {
+      if (videoElement.srcObject) {
+        setFullScreenVideoSrc(videoElement.srcObject);
+      } else {
+        setFullScreenVideoSrc(videoElement.src);
+      }
+      setIsFullScreen(true);
+    }
+  };
+
+  const closeFullScreen = () => {
+    setIsFullScreen(false);
+    setFullScreenVideoSrc(null);
   };
 
   const handleVideoClick = (videoElement) => {
@@ -594,10 +581,6 @@ const Chat = () => {
                         <video
                           ref={el => {
                             remoteVideoRefs.current[remoteUserId] = el;
-                            if (el && remoteStreams.current[remoteUserId]) {
-                              el.srcObject = remoteStreams.current[remoteUserId];
-                              el.play().catch(e => console.error("Error playing video:", e));
-                            }
                           }}
                           autoPlay
                           playsInline
