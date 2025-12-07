@@ -39,7 +39,7 @@ const Chat = () => {
   const [message, setMessage] = useState("");
   const [roomData, setRoomData] = useState(null);
 
-  // Video call states (from old logic)
+  // Video call states
   const [isVideoCallActive, setIsVideoCallActive] = useState(false);
   const [remoteUserIds, setRemoteUserIds] = useState([]);
   const [isCameraEnabled, setIsCameraEnabled] = useState(true);
@@ -51,7 +51,7 @@ const Chat = () => {
   const [remoteUsers, setRemoteUsers] = useState({});
   const [showHandDraw, setShowHandDraw] = useState(false);
 
-  // Refs (from old logic)
+  // Refs
   const messagesEndRef = useRef(null);
   const socketRef = useRef(null);
   const localVideoRef = useRef(null);
@@ -60,6 +60,7 @@ const Chat = () => {
   const remoteVideoRefs = useRef({});
   const isVideoCallActiveRef = useRef(false);
 
+  // Redirect if no user data
   useEffect(() => {
     const token = localStorage.getItem("token");
     if (!userName || !roomId || !userId || !token) {
@@ -67,6 +68,7 @@ const Chat = () => {
       return;
     }
   }, [userName, roomId, userId, navigate]);
+
   const leaveRoom = async () => {
     try {
       await fetch(API_ENDPOINTS.LEAVE_ROOM, {
@@ -80,7 +82,6 @@ const Chat = () => {
     } catch (error) {
       console.error('Error leaving room:', error);
     }
-    // Keep auth data (token, userId, userName)
     localStorage.removeItem("roomId");
     localStorage.removeItem("roomName");
     navigate('/');
@@ -91,7 +92,14 @@ const Chat = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
-  // Initialize socket connection & WebRTC events (old logic)
+  // Set video source when call becomes active
+  useEffect(() => {
+    if (isVideoCallActive && localStreamRef.current && localVideoRef.current) {
+      localVideoRef.current.srcObject = localStreamRef.current;
+    }
+  }, [isVideoCallActive]);
+
+  // Initialize socket connection (OLD WORKING LOGIC)
   useEffect(() => {
     socketRef.current = io(SOCKET_URL);
 
@@ -108,16 +116,17 @@ const Chat = () => {
       toast.error(data.message);
     });
 
+    // WebRTC event listeners
     socketRef.current.on("userJoined", ({ userId: remoteUserId, userName: remoteUserName }) => {
       setRemoteUserIds(prev => prev.includes(remoteUserId) ? prev : [...prev, remoteUserId]);
       setRemoteUsers(prev => ({ ...prev, [remoteUserId]: remoteUserName }));
-
+      
       setTimeout(() => {
         if (isVideoCallActiveRef.current && localStreamRef.current) {
           handleUserJoined(remoteUserId);
         }
       }, 100);
-
+      
       toast.info(`${remoteUserName || remoteUserId} joined the call or room`);
     });
 
@@ -153,7 +162,7 @@ const Chat = () => {
         return updated;
       });
     });
-
+    
     socketRef.current.on("offer", handleOffer);
     socketRef.current.on("answer", handleAnswer);
     socketRef.current.on("ice-candidate", handleICECandidate);
@@ -163,6 +172,7 @@ const Chat = () => {
     };
   }, [roomId, userId, userName]);
 
+  // Fetch initial messages and room data
   useEffect(() => {
     const fetchData = async () => {
       try {
@@ -185,14 +195,7 @@ const Chat = () => {
     fetchData();
   }, [roomId]);
 
-  // Set video source when call becomes active (old logic)
-  useEffect(() => {
-    if (isVideoCallActive && localStreamRef.current && localVideoRef.current) {
-      localVideoRef.current.srcObject = localStreamRef.current;
-    }
-  }, [isVideoCallActive]);
-
-  // --- Video call handlers from old logic ---
+  // --- VIDEO CALL LOGIC (OLD WORKING CODE) ---
   const startVideoCall = async () => {
     try {
       if (!localStreamRef.current) {
@@ -232,7 +235,7 @@ const Chat = () => {
   const endVideoCall = () => {
     Object.values(peerConnections.current).forEach(connection => connection.close());
     peerConnections.current = {};
-
+    
     if (localStreamRef.current) {
       localStreamRef.current.getTracks().forEach(track => track.stop());
       localStreamRef.current = null;
@@ -252,6 +255,7 @@ const Chat = () => {
     toast.info("Video call ended");
   };
 
+  // CRITICAL: This is the peer connection factory from your old working code
   const createPeerConnection = (remoteUserId) => {
     if (peerConnections.current[remoteUserId]) {
       return peerConnections.current[remoteUserId];
@@ -266,19 +270,24 @@ const Chat = () => {
     });
     peerConnections.current[remoteUserId] = pc;
 
+    // add local tracks
     localStreamRef.current.getTracks().forEach(track => {
       pc.addTrack(track, localStreamRef.current);
     });
 
+    // send our ICE
     pc.onicecandidate = e => {
       if (e.candidate) {
         socketRef.current.emit("ice-candidate", { candidate: e.candidate, to: remoteUserId });
       }
     };
 
+    // attach remote stream
     pc.ontrack = e => {
       const el = remoteVideoRefs.current[remoteUserId];
-      if (el) el.srcObject = e.streams[0];
+      if (el) {
+        el.srcObject = e.streams[0];
+      }
     };
 
     return pc;
@@ -564,7 +573,9 @@ const Chat = () => {
                       <div key={remoteUserId} className="relative aspect-video bg-black rounded-2xl overflow-hidden border border-border-subtle">
                         <video
                           ref={el => {
-                            remoteVideoRefs.current[remoteUserId] = el;
+                            if (el) {
+                              remoteVideoRefs.current[remoteUserId] = el;
+                            }
                           }}
                           autoPlay
                           playsInline
