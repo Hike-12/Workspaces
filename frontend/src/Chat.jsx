@@ -109,11 +109,13 @@ const Chat = () => {
 
     // --- Video Call Events ---
     socketRef.current.on("userJoined", ({ userId: remoteUserId, userName: remoteUserName }) => {
+      console.log("User joined event received:", remoteUserId, remoteUserName);
       setRemoteUserIds(prev => prev.includes(remoteUserId) ? prev : [...prev, remoteUserId]);
       setRemoteUsers(prev => ({ ...prev, [remoteUserId]: remoteUserName }));
 
       setTimeout(() => {
         if (isVideoCallActiveRef.current && localStreamRef.current) {
+          console.log("Attempting to handle user joined for:", remoteUserId);
           handleUserJoined(remoteUserId);
         }
       }, 100);
@@ -122,6 +124,7 @@ const Chat = () => {
     });
 
     socketRef.current.on("userLeft", ({ userId: remoteUserId, userName: remoteUserName }) => {
+      console.log("User left event received:", remoteUserId, remoteUserName);
       setRemoteUserIds(prev => prev.filter(id => id !== remoteUserId));
       setRemoteUsers(prev => {
         const updated = { ...prev };
@@ -136,6 +139,7 @@ const Chat = () => {
     });
 
     socketRef.current.on("existingParticipants", ({ participants }) => {
+      console.log("Existing participants received:", participants);
       const newUserIds = participants
         .map(p => p.userId)
         .filter(id => id !== userId);
@@ -154,9 +158,20 @@ const Chat = () => {
       });
     });
 
-    socketRef.current.on("offer", handleOffer);
-    socketRef.current.on("answer", handleAnswer);
-    socketRef.current.on("ice-candidate", handleICECandidate);
+    socketRef.current.on("offer", (data) => {
+      console.log("Offer received from:", data.from);
+      handleOffer(data);
+    });
+    
+    socketRef.current.on("answer", (data) => {
+      console.log("Answer received from:", data.from);
+      handleAnswer(data);
+    });
+    
+    socketRef.current.on("ice-candidate", (data) => {
+      console.log("ICE candidate received from:", data.from);
+      handleICECandidate(data);
+    });
 
     return () => {
       socketRef.current.disconnect();
@@ -190,26 +205,33 @@ const Chat = () => {
 
   const startVideoCall = async () => {
     try {
+      console.log("Starting video call...");
       if (!localStreamRef.current) {
+        console.log("Getting user media...");
         localStreamRef.current = await navigator.mediaDevices.getUserMedia({
           video: true,
           audio: true,
         });
+        console.log("Got user media successfully");
       }
 
       setIsVideoCallActive(true);
       isVideoCallActiveRef.current = true;
 
+      console.log("Emitting joinCall event to server");
       socketRef.current.emit("joinCall", { roomId, userId, userName });
 
       setTimeout(() => {
         const validRemoteUsers = remoteUserIds.filter(id => id !== userId);
+        console.log("Valid remote users to call:", validRemoteUsers);
         validRemoteUsers.forEach(async (remoteUserId) => {
           if (!peerConnections.current[remoteUserId]) {
+            console.log("Creating peer connection for:", remoteUserId);
             const pc = createPeerConnection(remoteUserId);
             try {
               const offer = await pc.createOffer();
               await pc.setLocalDescription(offer);
+              console.log("Sending initial offer to:", remoteUserId);
               socketRef.current.emit("offer", { offer, to: remoteUserId });
             } catch (err) {
               console.error("Error creating offer for", remoteUserId, err);
@@ -255,41 +277,53 @@ const Chat = () => {
     const pc = new window.RTCPeerConnection({
       iceServers: [
         { urls: "stun:stun.l.google.com:19302" },
-        { urls: "stun:stun1.l.google.com:19302" },
-        { urls: "stun:stun2.l.google.com:19302" },
-        { urls: "stun:stun3.l.google.com:19302" },
-        { urls: "stun:stun4.l.google.com:19302" },
-        { urls: "turn:openrelay.metered.ca:80", username: "openrelayproject", credential: "openrelayproject" },
-        { urls: "turn:openrelay.metered.ca:443", username: "openrelayproject", credential: "openrelayproject" },
-        { urls: "turn:openrelay.metered.ca:443?transport=tcp", username: "openrelayproject", credential: "openrelayproject" },
+        { urls: "turn:relay1.expressturn.com:3478", username: "efrelayusername", credential: "efrelaypassword" },
+        { urls: "turn:a.relay.metered.ca:80", username: "openrelayproject", credential: "openrelayproject" },
+        { urls: "turn:a.relay.metered.ca:443", username: "openrelayproject", credential: "openrelayproject" },
       ]
     });
     peerConnections.current[remoteUserId] = pc;
 
-    localStreamRef.current.getTracks().forEach(track => {
-      pc.addTrack(track, localStreamRef.current);
-    });
+    if (localStreamRef.current) {
+      localStreamRef.current.getTracks().forEach(track => {
+        pc.addTrack(track, localStreamRef.current);
+      });
+    }
 
     pc.onicecandidate = e => {
       if (e.candidate) {
+        console.log("Sending ICE candidate to:", remoteUserId);
         socketRef.current.emit("ice-candidate", { candidate: e.candidate, to: remoteUserId });
       }
     };
 
     pc.ontrack = e => {
+      console.log("Received remote track from:", remoteUserId);
       const el = remoteVideoRefs.current[remoteUserId];
       if (el) el.srcObject = e.streams[0];
+    };
+
+    pc.oniceconnectionstatechange = () => {
+      console.log("ICE connection state for", remoteUserId, ":", pc.iceConnectionState);
     };
 
     return pc;
   };
 
   const handleUserJoined = async (remoteUserId) => {
-    if (!localStreamRef.current) return;
-    const pc = createPeerConnection(remoteUserId);
-    const offer = await pc.createOffer();
-    await pc.setLocalDescription(offer);
-    socketRef.current.emit("offer", { offer, to: remoteUserId });
+    if (!localStreamRef.current) {
+      console.error("No local stream available");
+      return;
+    }
+    try {
+      const pc = createPeerConnection(remoteUserId);
+      const offer = await pc.createOffer();
+      await pc.setLocalDescription(offer);
+      console.log("Sending offer to:", remoteUserId);
+      socketRef.current.emit("offer", { offer, to: remoteUserId });
+    } catch (err) {
+      console.error("Error in handleUserJoined:", err);
+    }
   };
 
   const handleOffer = async ({ offer, from }) => {
