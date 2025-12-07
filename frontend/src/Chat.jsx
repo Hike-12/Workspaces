@@ -59,6 +59,7 @@ const Chat = () => {
   const localStreamRef = useRef(null);
   const peerConnections = useRef({});
   const remoteVideoRefs = useRef({});
+  const remoteStreams = useRef({});
   const isVideoCallActiveRef = useRef(false);
   const iceCandidateQueue = useRef({});
 
@@ -287,8 +288,15 @@ const Chat = () => {
 
     pc.ontrack = e => {
       console.log("Received remote track from:", remoteUserId);
-      const el = remoteVideoRefs.current[remoteUserId];
-      if (el) el.srcObject = e.streams[0];
+      const stream = e.streams[0];
+      if (stream) {
+        remoteStreams.current[remoteUserId] = stream;
+        const el = remoteVideoRefs.current[remoteUserId];
+        if (el) {
+          el.srcObject = stream;
+          el.play().catch(e => console.error("Error playing video:", e));
+        }
+      }
     };
 
     pc.oniceconnectionstatechange = () => {
@@ -674,7 +682,13 @@ const Chat = () => {
                     {remoteUserIds.filter(id => id !== userId).map((remoteUserId) => (
                       <div key={remoteUserId} className="relative aspect-video bg-black rounded-2xl overflow-hidden border border-border-subtle">
                         <video
-                          ref={el => remoteVideoRefs.current[remoteUserId] = el}
+                          ref={el => {
+                            remoteVideoRefs.current[remoteUserId] = el;
+                            if (el && remoteStreams.current[remoteUserId]) {
+                              el.srcObject = remoteStreams.current[remoteUserId];
+                              el.play().catch(e => console.error("Error playing video:", e));
+                            }
+                          }}
                           autoPlay
                           playsInline
                           className="w-full h-full object-cover cursor-pointer"
