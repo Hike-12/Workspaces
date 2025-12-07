@@ -308,7 +308,7 @@ export default function VideoHandDraw({ roomId = "default-room", onClose }) {
 
         {!showVideo && (
           <div className="absolute inset-0 flex items-center justify-center text-white/20">
-            <VideoOff size={48} />
+            {/* <VideoOff size={48} /> */}
           </div>
         )}
       </div>
