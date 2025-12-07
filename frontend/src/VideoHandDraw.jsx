@@ -248,8 +248,8 @@ export default function VideoHandDraw({ roomId = "default-room", onClose }) {
       className={cn(
         "fixed z-50 bg-black/90 backdrop-blur-sm shadow-2xl overflow-hidden transition-all duration-300",
         minimized 
-          ? "bottom-4 right-4 w-64 h-48 rounded-2xl border border-white/10" 
-          : "inset-4 rounded-3xl border border-white/10"
+          ? "bottom-4 right-4 w-48 h-36 md:w-64 md:h-48 rounded-2xl border border-white/10" 
+          : "inset-0 md:inset-4 rounded-none md:rounded-3xl border-0 md:border border-white/10"
       )}
     >
       {/* Header Controls */}
@@ -266,7 +266,7 @@ export default function VideoHandDraw({ roomId = "default-room", onClose }) {
           </div>
           
           {!minimized && (
-            <div className="text-white/50 text-xs bg-black/40 px-3 py-1.5 rounded-full backdrop-blur-md border border-white/10">
+            <div className="hidden md:block text-white/50 text-xs bg-black/40 px-3 py-1.5 rounded-full backdrop-blur-md border border-white/10">
               Raise index finger to draw
             </div>
           )}
@@ -315,7 +315,7 @@ export default function VideoHandDraw({ roomId = "default-room", onClose }) {
 
       {/* Toolbar */}
       {!minimized && (
-        <div className="absolute bottom-6 left-1/2 -translate-x-1/2 flex items-center gap-3 p-2 rounded-2xl bg-black/60 backdrop-blur-xl border border-white/10 shadow-2xl z-20">
+        <div className="absolute bottom-6 left-1/2 -translate-x-1/2 flex items-center gap-3 p-2 rounded-2xl bg-black/60 backdrop-blur-xl border border-white/10 shadow-2xl z-20 max-w-[95vw] overflow-x-auto">
           <button
             onClick={() => setTracking(!tracking)}
             className={cn(
