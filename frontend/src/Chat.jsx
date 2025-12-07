@@ -422,22 +422,6 @@ const Chat = () => {
     setFullScreenVideoSrc(null);
   };
 
-  const handleVideoClick = (videoElement) => {
-    if (videoElement) {
-      if (videoElement.srcObject) {
-        setFullScreenVideoSrc(videoElement.srcObject);
-      } else {
-        setFullScreenVideoSrc(videoElement.src);
-      }
-      setIsFullScreen(true);
-    }
-  };
-
-  const closeFullScreen = () => {
-    setIsFullScreen(false);
-    setFullScreenVideoSrc(null);
-  };
-
   const sendMessage = async () => {
     if (!message.trim()) return;
 
