@@ -60,6 +60,7 @@ const Chat = () => {
   const peerConnections = useRef({});
   const remoteVideoRefs = useRef({});
   const isVideoCallActiveRef = useRef(false);
+  const iceCandidateQueue = useRef({});
 
   useEffect(() => {
     if (!userName || !roomId || !userId) {
@@ -362,6 +363,19 @@ const Chat = () => {
       console.log("Setting remote description from offer");
       await pc.setRemoteDescription(new window.RTCSessionDescription(offer));
       
+      // Process queued ICE candidates
+      if (iceCandidateQueue.current[from]) {
+        console.log("Processing queued ICE candidates for:", from);
+        for (const candidate of iceCandidateQueue.current[from]) {
+          try {
+            await pc.addIceCandidate(new window.RTCIceCandidate(candidate));
+          } catch (e) {
+            console.error("Error adding queued ICE candidate:", e);
+          }
+        }
+        delete iceCandidateQueue.current[from];
+      }
+
       console.log("Creating answer");
       const answer = await pc.createAnswer();
       await pc.setLocalDescription(answer);
@@ -392,6 +406,19 @@ const Chat = () => {
       console.log("Setting remote description from answer");
       await pc.setRemoteDescription(new window.RTCSessionDescription(answer));
       console.log("Successfully set remote description for:", from);
+
+      // Process queued ICE candidates
+      if (iceCandidateQueue.current[from]) {
+        console.log("Processing queued ICE candidates for:", from);
+        for (const candidate of iceCandidateQueue.current[from]) {
+          try {
+            await pc.addIceCandidate(new window.RTCIceCandidate(candidate));
+          } catch (e) {
+            console.error("Error adding queued ICE candidate:", e);
+          }
+        }
+        delete iceCandidateQueue.current[from];
+      }
     } catch (err) {
       console.error("Failed to set remote answer:", err);
     }
@@ -406,7 +433,12 @@ const Chat = () => {
     }
     
     if (!pc.remoteDescription) {
-      console.warn("Received ICE candidate before remote description - this may cause issues");
+      console.warn("Received ICE candidate before remote description - queueing");
+      if (!iceCandidateQueue.current[from]) {
+        iceCandidateQueue.current[from] = [];
+      }
+      iceCandidateQueue.current[from].push(candidate);
+      return;
     }
     
     try {
