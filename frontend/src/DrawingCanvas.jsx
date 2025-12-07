@@ -311,6 +311,87 @@ const DrawingCanvas = () => {
     else if (tool === "line") drawLine(startPos.x, startPos.y, x, y, color, lineWidth);
   };
 
+  const handleTouchStart = (e) => {
+    e.preventDefault();
+    const touch = e.touches[0];
+    const rect = canvasRef.current.getBoundingClientRect();
+    const x = touch.clientX - rect.left;
+    const y = touch.clientY - rect.top;
+
+    if (tool === "text") {
+      setTextPos({ x, y });
+      setShowTextInput(true);
+      return;
+    }
+
+    setDrawing(true);
+    setStartPos({ x, y });
+    pushUndo();
+
+    if (tool === "pen" || tool === "eraser") {
+      const ctx = canvasRef.current.getContext("2d");
+      ctx.beginPath();
+      ctx.moveTo(x, y);
+    }
+  };
+
+  const handleTouchMove = (e) => {
+    e.preventDefault();
+    if (!drawing) return;
+    const touch = e.touches[0];
+    const rect = canvasRef.current.getBoundingClientRect();
+    const x = touch.clientX - rect.left;
+    const y = touch.clientY - rect.top;
+
+    if (tool === "pen") {
+      drawLine(startPos.x, startPos.y, x, y, color, lineWidth);
+      setStartPos({ x, y });
+    } else if (tool === "eraser") {
+      erase(x, y, lineWidth * 5);
+    } else {
+      // Preview shapes
+      const ctx = previewCanvasRef.current.getContext("2d");
+      ctx.clearRect(0, 0, previewCanvasRef.current.width, previewCanvasRef.current.height);
+      ctx.strokeStyle = color;
+      ctx.lineWidth = lineWidth;
+      ctx.globalAlpha = 0.5;
+
+      if (tool === "rect") {
+        ctx.strokeRect(startPos.x, startPos.y, x - startPos.x, y - startPos.y);
+      } else if (tool === "circle") {
+        const radius = Math.sqrt(Math.pow(x - startPos.x, 2) + Math.pow(y - startPos.y, 2));
+        ctx.beginPath();
+        ctx.arc(startPos.x, startPos.y, radius, 0, 2 * Math.PI);
+        ctx.stroke();
+      } else if (tool === "line") {
+        ctx.beginPath();
+        ctx.moveTo(startPos.x, startPos.y);
+        ctx.lineTo(x, y);
+        ctx.stroke();
+      }
+    }
+  };
+
+  const handleTouchEnd = (e) => {
+    e.preventDefault();
+    if (!drawing) return;
+    setDrawing(false);
+    
+    const touch = e.changedTouches[0];
+    const rect = canvasRef.current.getBoundingClientRect();
+    const x = touch.clientX - rect.left;
+    const y = touch.clientY - rect.top;
+
+    // Clear preview
+    const previewCtx = previewCanvasRef.current.getContext("2d");
+    previewCtx.clearRect(0, 0, previewCanvasRef.current.width, previewCanvasRef.current.height);
+
+    // Finalize shape
+    if (tool === "rect") drawRect(startPos.x, startPos.y, x, y, color, lineWidth);
+    else if (tool === "circle") drawCircle(startPos.x, startPos.y, x, y, color, lineWidth);
+    else if (tool === "line") drawLine(startPos.x, startPos.y, x, y, color, lineWidth);
+  };
+
   const handleTextSubmit = () => {
     if (textInput.trim()) {
       drawText(textPos.x, textPos.y, textInput, color);
@@ -359,10 +440,10 @@ const DrawingCanvas = () => {
       </div>
 
       {/* Main Area */}
-      <div className="flex-1 relative flex overflow-hidden">
+      <div className="flex-1 relative flex flex-col md:flex-row overflow-hidden">
         {/* Toolbar */}
-        <div className="w-16 bg-bg-surface border-r border-border-subtle flex flex-col items-center py-4 gap-4 shrink-0 z-10">
-          <div className="flex flex-col gap-2 w-full px-2">
+        <div className="w-full h-16 md:w-16 md:h-full bg-bg-surface border-t md:border-t-0 md:border-r border-border-subtle flex flex-row md:flex-col items-center justify-between md:justify-start px-4 md:px-0 md:py-4 gap-4 shrink-0 z-10 order-2 md:order-1 overflow-x-auto md:overflow-x-visible">
+          <div className="flex flex-row md:flex-col gap-2 w-auto md:w-full px-2">
             {[
               { id: "pen", icon: Pencil, label: "Pen" },
               { id: "eraser", icon: Eraser, label: "Eraser" },
@@ -375,7 +456,7 @@ const DrawingCanvas = () => {
                 key={t.id}
                 onClick={() => setTool(t.id)}
                 className={cn(
-                  "p-3 rounded-xl flex items-center justify-center transition-all duration-200",
+                  "p-3 rounded-xl flex items-center justify-center transition-all duration-200 shrink-0",
                   tool === t.id 
                     ? "bg-accent-brand text-white shadow-lg shadow-accent-brand/25" 
                     : "text-fg-secondary hover:bg-bg-canvas hover:text-fg-primary"
@@ -387,16 +468,16 @@ const DrawingCanvas = () => {
             ))}
           </div>
 
-          <div className="w-8 h-px bg-border-subtle my-2" />
+          <div className="w-px h-8 md:w-8 md:h-px bg-border-subtle my-0 md:my-2 shrink-0" />
 
           {/* Color Picker */}
-          <div className="flex flex-col gap-2">
+          <div className="flex flex-row md:flex-col gap-2 shrink-0">
             {COLORS.map((c) => (
               <button
                 key={c}
                 onClick={() => setColor(c)}
                 className={cn(
-                  "w-6 h-6 rounded-full border border-border-subtle transition-transform hover:scale-110",
+                  "w-6 h-6 rounded-full border border-border-subtle transition-transform hover:scale-110 shrink-0",
                   color === c && "ring-2 ring-offset-2 ring-accent-brand scale-110"
                 )}
                 style={{ backgroundColor: c }}
@@ -404,16 +485,16 @@ const DrawingCanvas = () => {
             ))}
           </div>
 
-          <div className="w-8 h-px bg-border-subtle my-2" />
+          <div className="w-px h-8 md:w-8 md:h-px bg-border-subtle my-0 md:my-2 shrink-0" />
 
           {/* Line Width */}
-          <div className="flex flex-col items-center gap-2">
+          <div className="flex flex-row md:flex-col items-center gap-2 shrink-0">
             {[2, 4, 6, 8].map((w) => (
               <button
                 key={w}
                 onClick={() => setLineWidth(w)}
                 className={cn(
-                  "w-6 h-6 rounded-full flex items-center justify-center hover:bg-bg-canvas",
+                  "w-6 h-6 rounded-full flex items-center justify-center hover:bg-bg-canvas shrink-0",
                   lineWidth === w && "bg-bg-canvas"
                 )}
               >
@@ -427,14 +508,17 @@ const DrawingCanvas = () => {
         </div>
 
         {/* Canvas Container */}
-        <div ref={containerRef} className="flex-1 relative bg-white cursor-crosshair overflow-hidden">
+        <div ref={containerRef} className="flex-1 relative bg-white cursor-crosshair overflow-hidden order-1 md:order-2 touch-none">
           <canvas
             ref={canvasRef}
             onMouseDown={handleMouseDown}
             onMouseMove={handleMouseMove}
             onMouseUp={handleMouseUp}
             onMouseLeave={handleMouseUp}
-            className="absolute top-0 left-0 z-0"
+            onTouchStart={handleTouchStart}
+            onTouchMove={handleTouchMove}
+            onTouchEnd={handleTouchEnd}
+            className="absolute top-0 left-0 z-0 touch-none"
           />
           <canvas
             ref={previewCanvasRef}
