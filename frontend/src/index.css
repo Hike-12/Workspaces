@@ -1,12 +1,64 @@
 @import "tailwindcss";
 
-@font-face {
-  font-family: 'Rothek';
-  src: url('/fonts/trial-rothek-light.otf') format('opentype');
-  font-weight: 400;
-  font-style: normal;
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Playfair+Display:ital,wght@0,400;0,600;0,700;1,400&display=swap');
+
+@theme {
+  --font-sans: 'Inter', sans-serif;
+  --font-serif: 'Playfair Display', serif;
+  
+  --color-bg-canvas: rgb(var(--bg-canvas));
+  --color-bg-surface: rgb(var(--bg-surface));
+  --color-fg-primary: rgb(var(--fg-primary));
+  --color-fg-secondary: rgb(var(--fg-secondary));
+  --color-accent-brand: rgb(var(--accent-brand));
+  --color-border-subtle: rgb(var(--border-subtle));
 }
 
-html, body, #root, * {
-  font-family: 'Rothek', 'Inter', 'Poppins', Arial, sans-serif !important;
+@layer base {
+  :root {
+    /* 60% Neutral (Base) */
+    --bg-canvas: 250 250 250; /* Off-white */
+    --bg-surface: 255 255 255;
+    
+    /* 30% Secondary (Contrast/Text) */
+    --fg-primary: 23 23 23; /* Almost black */
+    --fg-secondary: 82 82 82;
+    
+    /* 10% Accent */
+    --accent-brand: 79 70 229; /* Indigo */
+    
+    /* Semantic */
+    --border-subtle: 229 229 229;
+  }
+
+  .dark {
+    /* 60% Neutral (Base) */
+    --bg-canvas: 10 10 10; /* Deep Charcoal */
+    --bg-surface: 23 23 23;
+    
+    /* 30% Secondary (Contrast/Text) */
+    --fg-primary: 237 237 237;
+    --fg-secondary: 163 163 163;
+    
+    /* 10% Accent */
+    --accent-brand: 99 102 241; /* Lighter Indigo */
+    
+    /* Semantic */
+    --border-subtle: 38 38 38;
+  }
+
+  html {
+    font-family: 'Inter', sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  body {
+    @apply bg-bg-canvas text-fg-primary transition-colors duration-300;
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    font-family: 'Playfair Display', serif;
+    @apply tracking-tight;
+  }
 }

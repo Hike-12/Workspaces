@@ -1,3 +1,10 @@
+import { clsx } from "clsx";
+import { twMerge } from "tailwind-merge";
+
+export function cn(...inputs) {
+  return twMerge(clsx(inputs));
+}
+
 const isDevelopment = import.meta.env.DEV;
 
 export const NODE_BASE_URL = import.meta.env.VITE_NODE_BASE_URL || "http://localhost:5000";

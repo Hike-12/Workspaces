@@ -2,22 +2,22 @@ import React, { useRef, useEffect, useState } from "react";
 import { Hands } from "@mediapipe/hands";
 import { Camera } from "@mediapipe/camera_utils";
 import { io } from "socket.io-client";
-import { Palette, Eraser, Trash2, Circle, Hand, Eye, EyeOff, Minimize2, Maximize2 } from "lucide-react";
-
-const SOCKET_URL = import.meta.env.VITE_SOCKET_URL; // Replace with your socket URL
+import { Palette, Eraser, Trash2, Circle, Hand, Eye, EyeOff, Minimize2, Maximize2, Video, VideoOff, X } from "lucide-react";
+import { cn, SOCKET_URL } from "./lib/utils";
+import { motion, AnimatePresence } from "framer-motion";
 
 const COLORS = [
-  { name: "Red", value: "#FF6B6B" },
-  { name: "Blue", value: "#4ECDC4" },
-  { name: "Green", value: "#51CF66" },
-  { name: "Purple", value: "#9775FA" },
-  { name: "Orange", value: "#FF922B" },
-  { name: "Pink", value: "#FF6BC5" },
-  { name: "Yellow", value: "#FFD43B" },
+  { name: "Red", value: "#EF4444" },
+  { name: "Blue", value: "#3B82F6" },
+  { name: "Green", value: "#10B981" },
+  { name: "Purple", value: "#8B5CF6" },
+  { name: "Orange", value: "#F59E0B" },
+  { name: "Pink", value: "#EC4899" },
+  { name: "Yellow", value: "#FCD34D" },
   { name: "White", value: "#FFFFFF" }
 ];
 
-export default function VideoHandDraw({ roomId = "default-room" }) {
+export default function VideoHandDraw({ roomId = "default-room", onClose }) {
   const videoRef = useRef(null);
   const canvasRef = useRef(null);
   const socketRef = useRef(null);
@@ -25,6 +25,7 @@ export default function VideoHandDraw({ roomId = "default-room" }) {
   const smoothingBufferRef = useRef([]);
   const cameraRef = useRef(null);
   const handsRef = useRef(null);
+  const containerRef = useRef(null);
 
   const [selectedColor, setSelectedColor] = useState(COLORS[0].value);
   const [brushSize, setBrushSize] = useState(6);
@@ -80,6 +81,18 @@ export default function VideoHandDraw({ roomId = "default-room" }) {
   };
 
   useEffect(() => {
+    // Resize canvas to match container
+    const handleResize = () => {
+      if (containerRef.current && canvasRef.current) {
+        const { width, height } = containerRef.current.getBoundingClientRect();
+        canvasRef.current.width = width;
+        canvasRef.current.height = height;
+      }
+    };
+    
+    window.addEventListener('resize', handleResize);
+    handleResize();
+
     socketRef.current = io(SOCKET_URL);
     socketRef.current.emit("joinRoom", { room_id: roomId });
 
@@ -99,6 +112,8 @@ export default function VideoHandDraw({ roomId = "default-room" }) {
     hands.onResults((results) => {
       if (!tracking) return;
       const canvas = canvasRef.current;
+      if (!canvas) return;
+      
       const ctx = canvas.getContext("2d");
       if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
         setHandDetected(true);
@@ -106,7 +121,8 @@ export default function VideoHandDraw({ roomId = "default-room" }) {
         const tip = landmarks[8];
         
         // Always use full canvas dimensions for drawing coordinates
-        const rawX = tip.x * canvas.width;
+        // Mirror X coordinate for natural feel
+        const rawX = (1 - tip.x) * canvas.width;
         const rawY = tip.y * canvas.height;
         const { x, y } = smoothPosition(rawX, rawY);
         
@@ -170,6 +186,7 @@ export default function VideoHandDraw({ roomId = "default-room" }) {
 
     socketRef.current.on("hand-draw", ({ x, y, prev, color, size, eraser }) => {
       const canvas = canvasRef.current;
+      if (!canvas) return;
       const ctx = canvas.getContext("2d");
       if (prev) {
         ctx.lineCap = "round";
@@ -192,239 +209,165 @@ export default function VideoHandDraw({ roomId = "default-room" }) {
 
     socketRef.current.on("clear-canvas", () => {
       const canvas = canvasRef.current;
+      if (!canvas) return;
       const ctx = canvas.getContext("2d");
       ctx.clearRect(0, 0, canvas.width, canvas.height);
     });
 
     return () => {
       if (cameraRef.current) cameraRef.current.stop();
-      if (handsRef.current) handsRef.current.close();
-      socketRef.current?.disconnect();
+      if (socketRef.current) socketRef.current.disconnect();
+      window.removeEventListener('resize', handleResize);
     };
-  }, [roomId, selectedColor, brushSize, isEraser, tracking]);
+  }, [roomId, tracking]);
 
-  const handleToggleTracking = () => {
-    setTracking((prev) => {
-      const next = !prev;
-      if (cameraRef.current) {
-        if (next) {
-          cameraRef.current.start();
-          setShowVideo(true);
-        } else {
-          cameraRef.current.stop();
-          setShowVideo(false);
-        }
-      }
-      return next;
-    });
-    clearDrawingState();
-  };
-
-  const handleToggleVideo = () => {
-    setShowVideo(!showVideo);
-  };
-
-  const handleToggleMinimize = () => {
-    setMinimized((prev) => !prev);
-  };
+  useEffect(() => {
+    if (cameraRef.current) {
+      if (tracking) cameraRef.current.start();
+      else cameraRef.current.stop();
+    }
+  }, [tracking]);
 
   return (
-    <div className="flex flex-col items-center gap-4 p-6 bg-gray-900 rounded-xl">
-      <div className="relative" style={{ width: 640, height: 480 }}>
-        {/* Minimize/Maximize Button */}
-        <button
-          onClick={handleToggleMinimize}
-          className={`absolute top-4 right-4 z-20 px-3 py-2 rounded-full font-medium flex items-center gap-2 transition-all ${
-            minimized
-              ? "bg-gray-700 text-gray-300 hover:bg-gray-600"
-              : "bg-blue-600 text-white hover:bg-blue-700"
-          }`}
-        >
-          {minimized ? <Maximize2 className="w-5 h-5" /> : <Minimize2 className="w-5 h-5" />}
-          {minimized ? "Maximize Video" : "Minimize Video"}
-        </button>
-
-        {/* Video Feed - Always behind canvas */}
-        <video
-          ref={videoRef}
-          style={{
-            width: minimized ? 160 : 640,
-            height: minimized ? 120 : 480,
-            position: 'absolute',
-            top: minimized ? 16 : 0,
-            right: minimized ? 16 : 'auto',
-            left: minimized ? 'auto' : 0,
-            zIndex: 1, // Always behind canvas
-            objectFit: 'cover',
-            borderRadius: '12px',
-            boxShadow: minimized ? '0 2px 12px rgba(0,0,0,0.25)' : '',
-            transform: 'scaleX(-1)',
-            display: showVideo ? 'block' : 'none',
-            opacity: showVideo ? 1 : 0,
-            transition: 'opacity 0.3s, width 0.3s, height 0.3s'
-          }}
-          autoPlay
-          muted
-          playsInline
-        />
-
-        {/* Canvas - Always on top, full size */}
-        <canvas
-          ref={canvasRef}
-          width={640}
-          height={480}
-          style={{
-            position: 'absolute',
-            top: 0,
-            left: 0,
-            zIndex: 2, // Always on top of video
-            pointerEvents: 'none',
-            borderRadius: '12px',
-            transform: 'scaleX(-1)',
-            backgroundColor: showVideo ? 'transparent' : 'white',
-            transition: 'background-color 0.3s ease'
-          }}
-        />
-
-        {/* Hand detection indicator */}
-        <div
-          className={`absolute top-16 right-4 z-10 px-3 py-2 rounded-full text-sm font-medium transition-all ${
-            handDetected && tracking
-              ? "bg-green-500 text-white"
-              : tracking
-              ? "bg-red-500 text-white"
-              : "bg-gray-700 text-gray-300"
-          }`}
-        >
-          {tracking 
-            ? (handDetected ? "✓ Hand Detected" : "✗ No Hand") 
-            : "Tracking Off"}
+    <motion.div 
+      initial={{ opacity: 0, scale: 0.95 }}
+      animate={{ opacity: 1, scale: 1 }}
+      exit={{ opacity: 0, scale: 0.95 }}
+      className={cn(
+        "fixed z-50 bg-black/90 backdrop-blur-sm shadow-2xl overflow-hidden transition-all duration-300",
+        minimized 
+          ? "bottom-4 right-4 w-64 h-48 rounded-2xl border border-white/10" 
+          : "inset-4 rounded-3xl border border-white/10"
+      )}
+    >
+      {/* Header Controls */}
+      <div className="absolute top-0 left-0 right-0 p-4 flex justify-between items-start z-20 bg-gradient-to-b from-black/80 to-transparent">
+        <div className="flex items-center gap-2">
+          <div className={cn(
+            "px-3 py-1.5 rounded-full text-xs font-medium flex items-center gap-2 backdrop-blur-md border",
+            handDetected 
+              ? "bg-green-500/20 border-green-500/30 text-green-400" 
+              : "bg-red-500/20 border-red-500/30 text-red-400"
+          )}>
+            <div className={cn("w-2 h-2 rounded-full", handDetected ? "bg-green-400 animate-pulse" : "bg-red-400")} />
+            {handDetected ? "Hand Detected" : "No Hand Detected"}
+          </div>
+          
+          {!minimized && (
+            <div className="text-white/50 text-xs bg-black/40 px-3 py-1.5 rounded-full backdrop-blur-md border border-white/10">
+              Raise index finger to draw
+            </div>
+          )}
         </div>
 
-        {/* Video Toggle Button */}
-        <button
-          onClick={handleToggleVideo}
-          className={`absolute top-4 left-4 z-10 px-4 py-2 rounded-full font-medium flex items-center gap-2 transition-all ${
-            showVideo
-              ? "bg-blue-600 text-white hover:bg-blue-700"
-              : "bg-gray-700 text-gray-300 hover:bg-gray-600"
-          }`}
-        >
-          {showVideo ? <Eye className="w-5 h-5" /> : <EyeOff className="w-5 h-5" />}
-          {showVideo ? "Hide Video" : "Show Video"}
-        </button>
-
-        {/* Tracking toggle */}
-        <button
-          onClick={handleToggleTracking}
-          className={`absolute bottom-4 right-4 z-10 px-4 py-2 rounded-full font-medium flex items-center gap-2 transition-all ${
-            tracking
-              ? "bg-blue-600 text-white hover:bg-blue-700"
-              : "bg-green-600 text-white hover:bg-green-700"
-          }`}
-        >
-          <Hand className="w-5 h-5" />
-          {tracking ? "Stop Tracking" : "Start Tracking"}
-        </button>
-
-        {/* Canvas-only overlay message */}
-        {!showVideo && (
-          <div className="absolute top-4 left-1/2 transform -translate-x-1/2 z-10 bg-gray-800 bg-opacity-80 px-4 py-2 rounded-lg text-white text-center pointer-events-none">
-            Canvas View: {tracking ? "Hand tracking active" : "Hand tracking paused"}
-          </div>
-        )}
-      </div>
-
-      {/* Controls */}
-      <div className="w-full max-w-2xl bg-gray-800 rounded-lg p-4">
-        <div className="flex items-center justify-between mb-4">
-          <h3 className="text-white font-semibold flex items-center gap-2">
-            <Palette className="w-5 h-5" />
-            Drawing Controls
-          </h3>
+        <div className="flex items-center gap-2">
           <button
-            onClick={() => setShowControls(!showControls)}
-            className="text-gray-400 hover:text-white transition-colors"
+            onClick={() => setMinimized(!minimized)}
+            className="p-2 rounded-full bg-black/40 text-white/70 hover:text-white hover:bg-white/10 backdrop-blur-md border border-white/10 transition-colors"
           >
-            {showControls ? "Hide" : "Show"}
+            {minimized ? <Maximize2 size={18} /> : <Minimize2 size={18} />}
+          </button>
+          <button
+            onClick={onClose}
+            className="p-2 rounded-full bg-red-500/20 text-red-400 hover:bg-red-500/30 backdrop-blur-md border border-red-500/30 transition-colors"
+          >
+            <X size={18} />
           </button>
         </div>
-        {showControls && (
-          <div className="space-y-4">
-            <div>
-              <label className="text-gray-300 text-sm mb-2 block">Color</label>
-              <div className="flex flex-wrap gap-2">
-                {COLORS.map((color) => (
-                  <button
-                    key={color.value}
-                    onClick={() => {
-                      setSelectedColor(color.value);
-                      setIsEraser(false);
-                      clearDrawingState();
-                    }}
-                    className={`w-10 h-10 rounded-full border-2 transition-all ${
-                      selectedColor === color.value && !isEraser
-                        ? "border-white scale-110"
-                        : "border-gray-600 hover:border-gray-400"
-                    }`}
-                    style={{ backgroundColor: color.value }}
-                    title={color.name}
-                  />
-                ))}
-                <button
-                  onClick={() => {
-                    setIsEraser(!isEraser);
-                    clearDrawingState();
-                  }}
-                  className={`w-10 h-10 rounded-full border-2 flex items-center justify-center transition-all ${
-                    isEraser
-                      ? "border-white bg-gray-600 scale-110"
-                      : "border-gray-600 bg-gray-700 hover:border-gray-400"
-                  }`}
-                  title="Eraser"
-                >
-                  <Eraser className="w-5 h-5 text-white" />
-                </button>
-              </div>
-            </div>
-            <div>
-              <label className="text-gray-300 text-sm mb-2 block flex items-center gap-2">
-                <Circle className="w-4 h-4" />
-                Brush Size: {brushSize}px
-              </label>
-              <input
-                type="range"
-                min="2"
-                max="20"
-                value={brushSize}
-                onChange={(e) => setBrushSize(Number(e.target.value))}
-                className="w-full"
-              />
-            </div>
-            <button
-              onClick={clearCanvas}
-              className="w-full bg-red-600 hover:bg-red-700 text-white font-medium py-3 px-4 rounded-lg transition-colors flex items-center justify-center gap-2"
-            >
-              <Trash2 className="w-5 h-5" />
-              Clear Canvas
-            </button>
+      </div>
+
+      {/* Main Content */}
+      <div ref={containerRef} className="relative w-full h-full flex items-center justify-center bg-neutral-900">
+        {/* Video Feed */}
+        <video
+          ref={videoRef}
+          className={cn(
+            "absolute inset-0 w-full h-full object-cover transform scale-x-[-1]",
+            !showVideo && "opacity-0"
+          )}
+          playsInline
+        />
+        
+        {/* Drawing Canvas */}
+        <canvas
+          ref={canvasRef}
+          className="absolute inset-0 w-full h-full z-10"
+        />
+
+        {!showVideo && (
+          <div className="absolute inset-0 flex items-center justify-center text-white/20">
+            <VideoOff size={48} />
           </div>
         )}
       </div>
-      <div className="bg-gray-800 rounded-lg p-4 max-w-2xl">
-        <h4 className="text-white font-semibold mb-2">How to use:</h4>
-        <ul className="text-gray-300 text-sm space-y-1">
-          <li>• <strong>Point your index finger up</strong> (with other fingers folded) to draw</li>
-          <li>• Move your finger to create lines</li>
-          <li>• Lower your finger to stop drawing</li>
-          <li>• Select colors and adjust brush size below</li>
-          <li>• Use eraser mode to remove strokes</li>
-          <li>• <strong>"Stop Tracking"</strong> - Pauses hand detection and shows clean canvas</li>
-          <li>• <strong>"Hide Video"</strong> - Hides camera feed, keeps canvas visible</li>
-          <li>• <strong>"Minimize Video"</strong> - Shrinks video to corner, drawing continues on full canvas</li>
-          <li>• Drawing always happens on the full canvas regardless of video size</li>
-        </ul>
-      </div>
-    </div>
+
+      {/* Toolbar */}
+      {!minimized && (
+        <div className="absolute bottom-6 left-1/2 -translate-x-1/2 flex items-center gap-3 p-2 rounded-2xl bg-black/60 backdrop-blur-xl border border-white/10 shadow-2xl z-20">
+          <button
+            onClick={() => setTracking(!tracking)}
+            className={cn(
+              "p-3 rounded-xl transition-all duration-200",
+              tracking ? "bg-green-500/20 text-green-400" : "bg-white/5 text-white/50 hover:bg-white/10"
+            )}
+            title={tracking ? "Stop Tracking" : "Start Tracking"}
+          >
+            <Hand size={20} />
+          </button>
+
+          <button
+            onClick={() => setShowVideo(!showVideo)}
+            className={cn(
+              "p-3 rounded-xl transition-all duration-200",
+              showVideo ? "bg-blue-500/20 text-blue-400" : "bg-white/5 text-white/50 hover:bg-white/10"
+            )}
+            title={showVideo ? "Hide Video" : "Show Video"}
+          >
+            {showVideo ? <Eye size={20} /> : <EyeOff size={20} />}
+          </button>
+
+          <div className="w-px h-8 bg-white/10 mx-1" />
+
+          <div className="flex items-center gap-1.5 px-2">
+            {COLORS.map((c) => (
+              <button
+                key={c.name}
+                onClick={() => {
+                  setSelectedColor(c.value);
+                  setIsEraser(false);
+                }}
+                className={cn(
+                  "w-6 h-6 rounded-full border border-white/10 transition-transform hover:scale-110",
+                  selectedColor === c.value && !isEraser && "ring-2 ring-offset-2 ring-offset-black ring-white scale-110"
+                )}
+                style={{ backgroundColor: c.value }}
+                title={c.name}
+              />
+            ))}
+          </div>
+
+          <div className="w-px h-8 bg-white/10 mx-1" />
+
+          <button
+            onClick={() => setIsEraser(!isEraser)}
+            className={cn(
+              "p-3 rounded-xl transition-all duration-200",
+              isEraser ? "bg-white text-black" : "bg-white/5 text-white/70 hover:bg-white/10 hover:text-white"
+            )}
+            title="Eraser"
+          >
+            <Eraser size={20} />
+          </button>
+
+          <button
+            onClick={clearCanvas}
+            className="p-3 rounded-xl bg-white/5 text-white/70 hover:bg-red-500/20 hover:text-red-400 transition-all duration-200"
+            title="Clear Canvas"
+          >
+            <Trash2 size={20} />
+          </button>
+        </div>
+      )}
+    </motion.div>
   );
 }

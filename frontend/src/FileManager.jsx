@@ -1,10 +1,11 @@
 import React, { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { API_ENDPOINTS } from "./lib/utils";
-import { FileText, Upload, Trash2, Eye, ArrowLeft } from "lucide-react";
+import { API_ENDPOINTS, cn } from "./lib/utils";
+import { FileText, Upload, Trash2, Eye, ArrowLeft, File, Download, X } from "lucide-react";
 import { ToastContainer, toast } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
 import { useTheme } from "./contexts/ThemeContext";
+import { motion, AnimatePresence } from "framer-motion";
 
 const FileManager = () => {
   const { roomId } = useParams();
@@ -13,22 +14,9 @@ const FileManager = () => {
   const [files, setFiles] = useState([]);
   const [file, setFile] = useState(null);
   const [fileName, setFileName] = useState("");
-  const [uploadMessage, setUploadMessage] = useState("");
+  const [isUploading, setIsUploading] = useState(false);
   const navigate = useNavigate();
   const { theme } = useTheme();
-
-  // Colors from theme context, fallback to chat style
-  const colors = theme.colors || {
-    background: theme.name === "dark" ? "bg-neutral-900" : "bg-neutral-50",
-    surface: theme.name === "dark" ? "bg-neutral-800" : "bg-white",
-    accent: theme.name === "dark" ? "bg-yellow-900" : "bg-yellow-100",
-    text: theme.name === "dark" ? "text-neutral-100" : "text-neutral-800",
-    border: theme.name === "dark" ? "border-neutral-700" : "border-neutral-200",
-    primary: theme.name === "dark" ? "text-yellow-400" : "text-yellow-700",
-    secondary: theme.name === "dark" ? "bg-yellow-900" : "bg-yellow-50",
-    icon: theme.name === "dark" ? "text-yellow-400" : "text-yellow-700",
-    input: theme.name === "dark" ? "bg-neutral-800" : "bg-neutral-100",
-  };
 
   useEffect(() => {
     const fetchFiles = async () => {
@@ -48,17 +36,19 @@ const FileManager = () => {
 
   const handleFileChange = (e) => {
     const selectedFile = e.target.files[0];
-    setFile(selectedFile);
-    setFileName(selectedFile ? selectedFile.name : "");
+    if (selectedFile) {
+      setFile(selectedFile);
+      setFileName(selectedFile.name);
+    }
   };
 
   const handleFileUpload = async (e) => {
     e.preventDefault();
     if (!file || !fileName) {
-      setUploadMessage("File and name are required");
       toast.error("File and name are required");
       return;
     }
+    setIsUploading(true);
     const formData = new FormData();
     formData.append("file", file);
     formData.append("name", fileName);
@@ -71,9 +61,7 @@ const FileManager = () => {
         body: formData,
       });
       if (!response.ok) throw new Error("Failed to upload file");
-      const data = await response.json();
-      setUploadMessage(data.message);
-
+      
       // Refresh files list
       const filesResponse = await fetch(API_ENDPOINTS.GET_FILES(roomId));
       const filesData = await filesResponse.json();
@@ -82,8 +70,9 @@ const FileManager = () => {
       setFileName("");
       toast.success("File uploaded successfully!");
     } catch (err) {
-      setUploadMessage("Error uploading file");
       toast.error("Error uploading file. Please try again.");
+    } finally {
+      setIsUploading(false);
     }
   };
 
@@ -122,104 +111,168 @@ const FileManager = () => {
     });
   };
 
+  const containerVariants = {
+    hidden: { opacity: 0 },
+    show: {
+      opacity: 1,
+      transition: {
+        staggerChildren: 0.05
+      }
+    }
+  };
+
+  const itemVariants = {
+    hidden: { opacity: 0, y: 10 },
+    show: { opacity: 1, y: 0 }
+  };
+
   return (
-    <div className={`fixed inset-0 min-h-screen min-w-screen w-screen h-screen flex flex-col items-center justify-center ${colors.background} ${colors.text} font-inter`}>
-      <ToastContainer position="top-right" theme={theme.name === 'dark' ? 'dark' : 'light'} />
-      <div className={`w-full max-w-2xl h-[95vh] mx-auto my-8 rounded-3xl shadow-lg ${colors.surface} px-8 py-8 flex flex-col gap-8`}>
+    <div className="min-h-screen w-full bg-bg-canvas text-fg-primary font-sans flex flex-col items-center py-12 px-6">
+      <ToastContainer position="top-right" theme={theme} />
+      
+      <div className="w-full max-w-4xl flex flex-col gap-8">
         {/* Header */}
-        <div className="flex items-center justify-between mb-2">
+        <div className="flex items-center justify-between">
           <div className="flex items-center gap-4">
-            <FileText size={32} className={colors.icon} />
-            <div>
-              <h1 className={`text-2xl font-semibold m-0 ${colors.text}`}>File Manager</h1>
-              <span className={`text-base flex items-center gap-2 mt-1 ${colors.primary}`}>
-                Room Files
-              </span>
-            </div>
-          </div>
-          <div className="flex gap-3">
             <button
-              title="Back to Chat"
               onClick={() => navigate(`/room/${roomId}`)}
-              className={`rounded-xl p-2 ${colors.input} flex items-center border-none`}
+              className="p-2 rounded-xl hover:bg-bg-surface text-fg-secondary hover:text-fg-primary transition-colors"
             >
-              <ArrowLeft size={22} className={colors.icon} />
+              <ArrowLeft size={24} />
             </button>
+            <div>
+              <h1 className="font-serif text-3xl font-medium">Files</h1>
+              <p className="text-fg-secondary">Manage and share resources</p>
+            </div>
           </div>
         </div>
 
-        {/* Upload Section */}
-        <div className={`rounded-2xl p-4 mb-2 flex flex-col gap-5 ${colors.input}`}>
-          <div className="flex items-center gap-2 mb-2">
-            <Upload size={20} className={colors.icon} />
-            <span className={`font-medium text-base ${colors.primary}`}>Upload New File</span>
-          </div>
-          <form onSubmit={handleFileUpload} className="flex flex-col gap-3">
-            <input
-              type="text"
-              value={fileName}
-              readOnly
-              placeholder="File name"
-              className={`rounded-xl px-4 py-3 text-base outline-none transition border ${colors.border} ${colors.input} ${colors.text} shadow-sm`}
-            />
-            <input
-              type="file"
-              onChange={handleFileChange}
-              className={`rounded-xl px-4 py-3 text-base outline-none transition border ${colors.border} ${colors.input} ${colors.text} shadow-sm`}
-              required
-            />
-            <button
-              type="submit"
-              className="rounded-xl px-4 py-3 font-medium text-base flex items-center gap-2 shadow-sm bg-yellow-700 text-white hover:bg-yellow-800 transition"
-            >
-              <Upload size={20} />
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 items-start">
+          {/* Upload Card */}
+          <div className="bg-bg-surface border border-border-subtle rounded-3xl p-6 shadow-sm lg:col-span-1 sticky top-6">
+            <h2 className="font-serif text-lg font-medium mb-4 flex items-center gap-2">
+              <Upload size={20} className="text-accent-brand" />
               Upload File
-            </button>
-          </form>
-          {uploadMessage && (
-            <div className={`mt-2 p-2 rounded-lg font-semibold ${colors.background} ${colors.text}`}>
-              {uploadMessage}
-            </div>
-          )}
-        </div>
-
-        {/* Files List */}
-        <div className={`rounded-2xl p-4 min-h-[220px] max-h-[320px] overflow-y-auto flex flex-col gap-3 border ${colors.border} ${colors.input}`}>
-          {files.length === 0 ? (
-            <div className="text-lg text-center py-12" style={{ color: theme.name === "dark" ? "#FFD700" : "#0C1844" }}>
-              No files uploaded yet
-            </div>
-          ) : (
-            files.map((file) => (
-              <div
-                key={file.id}
-                className={`rounded-xl px-4 py-3 mb-1 shadow-sm max-w-[100%] flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 ${colors.surface} border ${colors.border}`}
-              >
-                <div className="flex-1">
-                  <h3 className={`font-bold text-lg mb-1 ${colors.primary}`}>{file.name}</h3>
-                  <p className="text-sm" style={{ color: theme.name === "dark" ? "#FFD700" : "#0C1844" }}>
-                    Uploaded by: {file.uploaded_by || 'User'} • {formatDate(file.uploaded_at || new Date())}
-                  </p>
-                </div>
-                <div className="flex gap-2">
-                  <button
-                    onClick={() => handleViewFile(file.id)}
-                    className="rounded-lg px-3 py-2 font-semibold flex items-center gap-2 shadow-sm bg-yellow-700 text-white hover:bg-yellow-800 transition"
-                  >
-                    <Eye size={18} />
-                    View
-                  </button>
-                  <button
-                    onClick={() => handleDeleteFile(file.id)}
-                    className="rounded-lg px-3 py-2 font-semibold flex items-center gap-2 shadow-sm bg-red-600 text-white hover:bg-red-700 transition"
-                  >
-                    <Trash2 size={18} />
-                    Delete
-                  </button>
-                </div>
+            </h2>
+            
+            <form onSubmit={handleFileUpload} className="flex flex-col gap-4">
+              <div className="relative group">
+                <input
+                  type="file"
+                  id="file-upload"
+                  onChange={handleFileChange}
+                  className="hidden"
+                />
+                <label
+                  htmlFor="file-upload"
+                  className={cn(
+                    "flex flex-col items-center justify-center w-full h-32 border-2 border-dashed rounded-2xl cursor-pointer transition-all duration-200",
+                    file 
+                      ? "border-accent-brand bg-accent-brand/5" 
+                      : "border-border-subtle hover:border-accent-brand/50 hover:bg-bg-canvas"
+                  )}
+                >
+                  {file ? (
+                    <div className="flex flex-col items-center text-center p-2">
+                      <FileText size={24} className="text-accent-brand mb-2" />
+                      <span className="text-sm font-medium text-fg-primary truncate max-w-[200px]">{file.name}</span>
+                      <span className="text-xs text-fg-secondary">Click to change</span>
+                    </div>
+                  ) : (
+                    <div className="flex flex-col items-center text-center">
+                      <Upload size={24} className="text-fg-secondary mb-2 group-hover:text-accent-brand transition-colors" />
+                      <span className="text-sm font-medium text-fg-primary">Choose a file</span>
+                      <span className="text-xs text-fg-secondary">or drag and drop</span>
+                    </div>
+                  )}
+                </label>
               </div>
-            ))
-          )}
+
+              {file && (
+                <div className="space-y-1.5">
+                  <label className="text-xs font-medium text-fg-secondary ml-1">File Name</label>
+                  <input
+                    type="text"
+                    value={fileName}
+                    onChange={(e) => setFileName(e.target.value)}
+                    className="w-full px-3 py-2.5 rounded-xl bg-bg-canvas border border-border-subtle focus:border-accent-brand focus:ring-2 focus:ring-accent-brand/20 outline-none transition-all duration-200 text-sm"
+                    placeholder="Enter file name"
+                  />
+                </div>
+              )}
+
+              <button
+                type="submit"
+                disabled={!file || isUploading}
+                className="w-full py-3 rounded-xl bg-accent-brand text-white font-medium shadow-lg shadow-accent-brand/25 hover:shadow-xl hover:shadow-accent-brand/30 transition-all duration-200 disabled:opacity-70 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+              >
+                {isUploading ? "Uploading..." : "Upload"}
+              </button>
+            </form>
+          </div>
+
+          {/* Files List */}
+          <div className="lg:col-span-2 flex flex-col gap-4">
+            <motion.div 
+              variants={containerVariants}
+              initial="hidden"
+              animate="show"
+              className="space-y-3"
+            >
+              <AnimatePresence mode="popLayout">
+                {files.length === 0 ? (
+                  <motion.div 
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    className="text-center py-12 text-fg-secondary bg-bg-surface border border-border-subtle rounded-3xl"
+                  >
+                    <File size={48} className="mx-auto mb-4 opacity-20" />
+                    <p>No files shared yet</p>
+                  </motion.div>
+                ) : (
+                  files.map((file) => (
+                    <motion.div
+                      key={file.id}
+                      variants={itemVariants}
+                      layout
+                      className="group bg-bg-surface border border-border-subtle rounded-2xl p-4 flex items-center justify-between hover:shadow-md transition-all duration-200"
+                    >
+                      <div className="flex items-center gap-4 overflow-hidden">
+                        <div className="h-10 w-10 rounded-xl bg-bg-canvas flex items-center justify-center text-fg-secondary group-hover:text-accent-brand transition-colors shrink-0">
+                          <FileText size={20} />
+                        </div>
+                        <div className="min-w-0">
+                          <h3 className="font-medium text-fg-primary truncate">{file.name}</h3>
+                          <div className="flex items-center gap-2 text-xs text-fg-secondary">
+                            <span>{file.userName || "Unknown"}</span>
+                            <span>•</span>
+                            <span>{formatDate(file.createdAt)}</span>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-2 shrink-0">
+                        <button
+                          onClick={() => handleViewFile(file.id)}
+                          className="p-2 rounded-lg hover:bg-bg-canvas text-fg-secondary hover:text-accent-brand transition-colors"
+                          title="View"
+                        >
+                          <Eye size={18} />
+                        </button>
+                        <button
+                          onClick={() => handleDeleteFile(file.id)}
+                          className="p-2 rounded-lg hover:bg-red-50 text-fg-secondary hover:text-red-500 transition-colors"
+                          title="Delete"
+                        >
+                          <Trash2 size={18} />
+                        </button>
+                      </div>
+                    </motion.div>
+                  ))
+                )}
+              </AnimatePresence>
+            </motion.div>
+          </div>
         </div>
       </div>
     </div>

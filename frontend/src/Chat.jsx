@@ -1,27 +1,32 @@
 import React, { useEffect, useState, useRef } from "react";
 import { io } from "socket.io-client";
 import { useParams, useNavigate } from "react-router-dom";
-import { API_ENDPOINTS, SOCKET_URL } from "./lib/utils";
+import { API_ENDPOINTS, SOCKET_URL, cn } from "./lib/utils";
 import { ToastContainer, toast } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
 import { useTheme } from "./contexts/ThemeContext";
 import {
-  FiSend,
-  FiLogOut,
-  FiVideo,
-  FiVideoOff,
-  FiMic,
-  FiMicOff,
-  FiSun,
-  FiMoon,
-  FiUsers,
-  FiFileText,
-  FiMonitor,
-  FiX,
-  FiUser,
-} from "react-icons/fi";
-import DrawingCanvas from "./DrawingCanvas";
+  Send,
+  LogOut,
+  Video,
+  VideoOff,
+  Mic,
+  MicOff,
+  Sun,
+  Moon,
+  Users,
+  FileText,
+  Monitor,
+  X,
+  User,
+  Phone,
+  PhoneOff,
+  LayoutGrid,
+  PenTool,
+  Hand
+} from "lucide-react";
 import VideoHandDraw from "./VideoHandDraw";
+import { motion, AnimatePresence } from "framer-motion";
 
 const Chat = () => {
   const { roomId } = useParams();
@@ -45,6 +50,7 @@ const Chat = () => {
   const [isMicEnabled, setIsMicEnabled] = useState(true);
   const [isFullScreen, setIsFullScreen] = useState(false);
   const [fullScreenVideoSrc, setFullScreenVideoSrc] = useState(null);
+  const [showHandDraw, setShowHandDraw] = useState(false);
 
   // Refs
   const messagesEndRef = useRef(null);
@@ -446,223 +452,311 @@ const Chat = () => {
     });
   };
 
-  // --- Styling ---
-  const colors = theme.colors || {
-    background: "bg-neutral-50",
-    surface: "bg-white",
-    accent: "bg-yellow-100",
-    text: "text-neutral-800",
-    border: "border-neutral-200",
-    primary: "bg-yellow-700",
-    secondary: "bg-yellow-50",
-    icon: "text-yellow-700",
-    input: "bg-neutral-100",
-  };
-
   return (
-    <div className={`min-h-screen w-full flex flex-col items-center justify-center ${colors.background} ${colors.text} font-inter`}>
-      <ToastContainer position="top-right" theme={theme.name === 'dark' ? 'dark' : 'light'} />
-      <div className={`w-full max-w-2xl mx-auto my-8 rounded-3xl shadow-lg ${colors.surface} px-8 py-8 flex flex-col gap-8`}>
-        {/* Header */}
-        <div className="flex items-center justify-between mb-2">
-          <div className="flex items-center gap-4">
-            <FiUser size={32} className={colors.icon} />
-            <div>
-              <h1 className={`text-2xl font-semibold m-0 ${colors.text}`}>{roomName || "Chat Room"}</h1>
-              <span className={`text-base flex items-center gap-2 mt-1 ${colors.primary}`}>
-                <FiUsers size={18} className={colors.primary} />
-                {roomData?.participants?.length || 0} online
+    <div className="min-h-screen w-full bg-bg-canvas text-fg-primary font-sans flex flex-col">
+      <ToastContainer position="top-right" theme={theme} />
+      
+      {/* Header */}
+      <header className="px-6 py-4 bg-bg-surface border-b border-border-subtle flex items-center justify-between sticky top-0 z-10">
+        <div className="flex items-center gap-4">
+          <div className="h-10 w-10 bg-accent-brand/10 rounded-xl flex items-center justify-center text-accent-brand">
+            <LayoutGrid size={20} />
+          </div>
+          <div>
+            <h1 className="font-serif text-xl font-semibold leading-tight">{roomName || "Workspace"}</h1>
+            <div className="flex items-center gap-2 text-sm text-fg-secondary">
+              <span className="flex items-center gap-1">
+                <Users size={14} />
+                {roomData?.participants?.length || 0} active
               </span>
             </div>
           </div>
-          <div className="flex gap-3">
-            <button
-              title="Toggle Theme"
-              onClick={toggleTheme}
-              className={`rounded-xl p-2 ${colors.input} flex items-center border-none`}
-            >
-              {theme.name === "dark" ? <FiSun size={22} className={colors.icon} /> : <FiMoon size={22} className={colors.icon} />}
-            </button>
-            <button
-              title="Files"
-              onClick={() => navigate(`/room/${roomId}/files`)}
-              className={`rounded-xl p-2 ${colors.input} flex items-center border-none`}
-            >
-              <FiFileText size={22} className={colors.icon} />
-            </button>
-            <button
-              title="Leave Room"
-              onClick={leaveRoom}
-              className={`rounded-xl p-2 ${colors.input} flex items-center border-none`}
-            >
-              <FiLogOut size={22} className={colors.icon} />
-            </button>
+        </div>
+
+        <div className="flex items-center gap-2">
+          <button
+            onClick={toggleTheme}
+            className="p-2.5 rounded-xl hover:bg-bg-canvas text-fg-secondary hover:text-fg-primary transition-colors"
+          >
+            {theme === "dark" ? <Sun size={20} /> : <Moon size={20} />}
+          </button>
+          <div className="h-6 w-px bg-border-subtle mx-1" />
+          <button
+            onClick={() => navigate(`/room/${roomId}/files`)}
+            className="p-2.5 rounded-xl hover:bg-bg-canvas text-fg-secondary hover:text-fg-primary transition-colors"
+            title="Files"
+          >
+            <FileText size={20} />
+          </button>
+          <button
+            onClick={leaveRoom}
+            className="p-2.5 rounded-xl hover:bg-red-50 text-red-500 hover:text-red-600 transition-colors"
+            title="Leave"
+          >
+            <LogOut size={20} />
+          </button>
+        </div>
+      </header>
+
+      <main className="flex-1 p-6 max-w-7xl mx-auto w-full grid gap-6 grid-cols-1 lg:grid-cols-3">
+        
+        {/* Left Column: Chat & Video */}
+        <div className="lg:col-span-2 flex flex-col gap-6">
+          
+          {/* Video Call Section */}
+          <div className="bg-bg-surface border border-border-subtle rounded-3xl p-6 shadow-sm">
+            <div className="flex items-center justify-between mb-6">
+              <h2 className="font-serif text-lg font-medium">Conference</h2>
+              {!isVideoCallActive ? (
+                <button
+                  onClick={startVideoCall}
+                  className="px-4 py-2 rounded-lg bg-accent-brand text-white text-sm font-medium flex items-center gap-2 hover:opacity-90 transition-opacity"
+                >
+                  <Phone size={16} />
+                  Start Call
+                </button>
+              ) : (
+                <button
+                  onClick={endVideoCall}
+                  className="px-4 py-2 rounded-lg bg-red-500 text-white text-sm font-medium flex items-center gap-2 hover:opacity-90 transition-opacity"
+                >
+                  <PhoneOff size={16} />
+                  End Call
+                </button>
+              )}
+            </div>
+
+            <AnimatePresence>
+              {isVideoCallActive && (
+                <motion.div
+                  initial={{ opacity: 0, height: 0 }}
+                  animate={{ opacity: 1, height: "auto" }}
+                  exit={{ opacity: 0, height: 0 }}
+                  className="space-y-4"
+                >
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
+                    <div className="relative aspect-video bg-black rounded-2xl overflow-hidden border border-border-subtle group">
+                      <video
+                        ref={localVideoRef}
+                        autoPlay
+                        playsInline
+                        muted
+                        className="w-full h-full object-cover cursor-pointer"
+                        onClick={() => handleVideoClick(localVideoRef.current)}
+                      />
+                      <div className="absolute bottom-2 left-2 bg-black/50 backdrop-blur-md px-2 py-1 rounded-md text-xs text-white font-medium flex items-center gap-1">
+                        You {isScreenSharing && <Monitor size={10} />}
+                      </div>
+                    </div>
+                    {remoteUserIds.filter(id => id !== userId).map((remoteUserId) => (
+                      <div key={remoteUserId} className="relative aspect-video bg-black rounded-2xl overflow-hidden border border-border-subtle">
+                        <video
+                          ref={el => remoteVideoRefs.current[remoteUserId] = el}
+                          autoPlay
+                          playsInline
+                          className="w-full h-full object-cover cursor-pointer"
+                          onClick={() => handleVideoClick(remoteVideoRefs.current[remoteUserId])}
+                        />
+                        <div className="absolute bottom-2 left-2 bg-black/50 backdrop-blur-md px-2 py-1 rounded-md text-xs text-white font-medium">
+                          {remoteUsers[remoteUserId] || "User"}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+
+                  <div className="flex justify-center gap-2">
+                    <button
+                      onClick={toggleMic}
+                      className={cn(
+                        "p-3 rounded-full transition-colors",
+                        isMicEnabled ? "bg-bg-canvas hover:bg-border-subtle text-fg-primary" : "bg-red-100 text-red-600"
+                      )}
+                    >
+                      {isMicEnabled ? <Mic size={20} /> : <MicOff size={20} />}
+                    </button>
+                    <button
+                      onClick={toggleCamera}
+                      className={cn(
+                        "p-3 rounded-full transition-colors",
+                        isCameraEnabled ? "bg-bg-canvas hover:bg-border-subtle text-fg-primary" : "bg-red-100 text-red-600"
+                      )}
+                    >
+                      {isCameraEnabled ? <Video size={20} /> : <VideoOff size={20} />}
+                    </button>
+                    <button
+                      onClick={toggleScreenShare}
+                      className={cn(
+                        "p-3 rounded-full transition-colors",
+                        isScreenSharing ? "bg-accent-brand text-white" : "bg-bg-canvas hover:bg-border-subtle text-fg-primary"
+                      )}
+                    >
+                      <Monitor size={20} />
+                    </button>
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
+
+          {/* Chat Section */}
+          <div className="bg-bg-surface border border-border-subtle rounded-3xl p-6 shadow-sm flex-1 flex flex-col min-h-[500px]">
+            <div className="flex-1 overflow-y-auto space-y-4 pr-2 custom-scrollbar mb-4">
+              {messages.map((msg, index) => {
+                const isMe = msg.userId === userId;
+                return (
+                  <motion.div
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    key={msg._id || index}
+                    className={cn(
+                      "flex flex-col max-w-[80%]",
+                      isMe ? "self-end items-end" : "self-start items-start"
+                    )}
+                  >
+                    <div className="flex items-center gap-2 mb-1 px-1">
+                      <span className="text-xs font-medium text-fg-secondary">
+                        {isMe ? "You" : msg.userName || msg.sender}
+                      </span>
+                      <span className="text-[10px] text-fg-secondary/70">
+                        {formatTime(msg.timestamp || msg.createdAt)}
+                      </span>
+                    </div>
+                    <div
+                      className={cn(
+                        "px-4 py-3 rounded-2xl text-sm leading-relaxed",
+                        isMe
+                          ? "bg-accent-brand text-white rounded-tr-sm"
+                          : "bg-bg-canvas text-fg-primary rounded-tl-sm"
+                      )}
+                    >
+                      {msg.content}
+                    </div>
+                  </motion.div>
+                );
+              })}
+              <div ref={messagesEndRef} />
+            </div>
+
+            <div className="relative flex items-center gap-2">
+              <input
+                type="text"
+                value={message}
+                onChange={(e) => setMessage(e.target.value)}
+                onKeyPress={(e) => e.key === 'Enter' && sendMessage()}
+                placeholder="Type a message..."
+                className="w-full pl-4 pr-12 py-3.5 rounded-xl bg-bg-canvas border border-border-subtle focus:border-accent-brand focus:ring-2 focus:ring-accent-brand/20 outline-none transition-all duration-200"
+              />
+              <button
+                onClick={sendMessage}
+                className="absolute right-2 p-2 rounded-lg bg-accent-brand text-white hover:opacity-90 transition-opacity"
+              >
+                <Send size={18} />
+              </button>
+            </div>
           </div>
         </div>
 
-        {/* Video Call Controls */}
-        <div className="flex gap-3 items-center mb-2">
-          {!isVideoCallActive ? (
-            <button
-              onClick={startVideoCall}
-              className="rounded-xl px-5 py-2 font-medium text-base flex items-center gap-2 shadow-sm bg-yellow-700 text-white hover:bg-yellow-800 transition"
-            >
-              <FiVideo size={20} />
-              Start Call
-            </button>
-          ) : (
-            <button
-              onClick={endVideoCall}
-              className="rounded-xl px-5 py-2 font-medium text-base flex items-center gap-2 shadow-sm bg-yellow-700 text-white hover:bg-yellow-800 transition"
-            >
-              <FiVideoOff size={20} />
-              End Call
-            </button>
-          )}
-        </div>
-
-        {/* Video Call Area */}
-        {isVideoCallActive && (
-          <div className={`rounded-2xl p-4 mb-2 flex flex-col gap-5 ${colors.input}`}>
-            <div className="flex gap-4">
-              <div className="flex flex-col items-center gap-1 flex-1">
-                <video
-                  ref={localVideoRef}
-                  autoPlay
-                  playsInline
-                  muted
-                  className={`w-full max-w-[180px] h-[120px] rounded-xl bg-black border-2 ${colors.border} cursor-pointer`}
-                  onClick={() => handleVideoClick(localVideoRef.current)}
-                />
-                <span className={`text-sm font-medium mt-1 ${colors.primary}`}>
-                  You {isScreenSharing ? <FiMonitor size={14} /> : ""}
-                </span>
-              </div>
-              {remoteUserIds.filter(id => id !== userId).map((remoteUserId) => (
-                <div key={remoteUserId} className="flex flex-col items-center gap-1 flex-1">
-                  <video
-                    ref={el => remoteVideoRefs.current[remoteUserId] = el}
-                    autoPlay
-                    playsInline
-                    className={`w-full max-w-[180px] h-[120px] rounded-xl bg-black border-2 ${colors.border} cursor-pointer`}
-                    onClick={() => handleVideoClick(remoteVideoRefs.current[remoteUserId])}
-                  />
-                  <span className={`text-sm font-medium mt-1 ${colors.primary}`}>
-                    {remoteUsers[remoteUserId] || remoteUserId}
+        {/* Right Column: Tools */}
+        <div className="flex flex-col gap-6">
+          <div className="bg-bg-surface border border-border-subtle rounded-3xl p-6 shadow-sm">
+            <h2 className="font-serif text-lg font-medium mb-4">Participants</h2>
+            <div className="space-y-3">
+              {roomData?.participants?.map((user) => (
+                <div key={user.userId} className="flex items-center gap-3 p-2 rounded-xl hover:bg-bg-canvas transition-colors">
+                  <div className="h-8 w-8 rounded-full bg-accent-brand/10 flex items-center justify-center text-accent-brand text-xs font-bold">
+                    {user.userName.charAt(0).toUpperCase()}
+                  </div>
+                  <span className="text-sm font-medium text-fg-primary">
+                    {user.userName} {user.userId === userId && "(You)"}
                   </span>
                 </div>
               ))}
             </div>
-            <div className="flex gap-3 justify-center mt-2">
+          </div>
+
+          <div className="bg-bg-surface border border-border-subtle rounded-3xl p-6 shadow-sm">
+            <h2 className="font-serif text-lg font-medium mb-4">Creative Tools</h2>
+            <div className="grid grid-cols-1 gap-3">
               <button
-                onClick={toggleMic}
-                className={`rounded-lg p-2 flex items-center shadow-sm ${colors.surface} border-none`}
+                onClick={() => navigate(`/room/${roomId}/whiteboard`)}
+                className="flex items-center gap-3 p-4 rounded-2xl bg-bg-canvas border border-border-subtle hover:border-accent-brand/50 hover:shadow-md transition-all duration-200 group text-left"
               >
-                {isMicEnabled ? <FiMic size={20} className={colors.icon} /> : <FiMicOff size={20} className={colors.icon} />}
+                <div className="h-10 w-10 rounded-xl bg-blue-500/10 text-blue-500 flex items-center justify-center group-hover:scale-110 transition-transform">
+                  <PenTool size={20} />
+                </div>
+                <div>
+                  <h3 className="font-medium text-fg-primary">Whiteboard</h3>
+                  <p className="text-xs text-fg-secondary">Collaborative drawing</p>
+                </div>
               </button>
+
               <button
-                onClick={toggleCamera}
-                className={`rounded-lg p-2 flex items-center shadow-sm ${colors.surface} border-none`}
+                onClick={() => setShowHandDraw(true)}
+                className="flex items-center gap-3 p-4 rounded-2xl bg-bg-canvas border border-border-subtle hover:border-accent-brand/50 hover:shadow-md transition-all duration-200 group text-left"
               >
-                {isCameraEnabled ? <FiVideo size={20} className={colors.icon} /> : <FiVideoOff size={20} className={colors.icon} />}
-              </button>
-              <button
-                onClick={toggleScreenShare}
-                className={`rounded-lg p-2 flex items-center shadow-sm ${colors.surface} border-none`}
-              >
-                <FiMonitor size={20} className={colors.icon} />
+                <div className="h-10 w-10 rounded-xl bg-purple-500/10 text-purple-500 flex items-center justify-center group-hover:scale-110 transition-transform">
+                  <Hand size={20} />
+                </div>
+                <div>
+                  <h3 className="font-medium text-fg-primary">AI Hand Draw</h3>
+                  <p className="text-xs text-fg-secondary">Gesture controlled canvas</p>
+                </div>
               </button>
             </div>
           </div>
-        )}
-
-        {roomData?.participants && (
-          <div className="flex gap-3 mt-3 flex-wrap">
-            {roomData.participants.map((user) => (
-              <div key={user.userId} className={`flex items-center rounded-lg px-3 py-1 gap-2 text-base ${colors.input} ${colors.text}`}>
-                <FiUser size={18} className={colors.primary} />
-                {user.userName}
-                {user.userId === userId && <span className="font-medium text-yellow-700">(You)</span>}
-              </div>
-            ))}
-          </div>
-        )}
-
-        {/* Chat Messages */}
-        <div className={`rounded-2xl p-4 min-h-[220px] max-h-[320px] overflow-y-auto flex flex-col gap-3 border ${colors.border} ${colors.input}`}>
-          {messages.map((msg, index) => (
-            <div
-              key={msg._id || index}
-              className={`rounded-xl px-4 py-3 mb-1 shadow-sm max-w-[80%] ${msg.userId === userId ? 'self-end bg-yellow-50' : `${colors.surface} self-start`}`}
-            >
-              <div className="flex items-center gap-2 mb-1">
-                <span className={`font-medium flex items-center gap-1 text-base ${colors.primary}`}>
-                  <FiUser size={16} className={colors.primary} />
-                  {msg.userName || msg.sender}
-                </span>
-                <span className={`text-xs ml-2 ${colors.icon}`}>
-                  {formatTime(msg.timestamp || msg.createdAt)}
-                </span>
-              </div>
-              <p className={`text-base m-0 break-words leading-relaxed ${colors.text}`}>{msg.content}</p>
-            </div>
-          ))}
-          <div ref={messagesEndRef} />
         </div>
+      </main>
 
-        {/* Message Input */}
-        <div className="flex items-center gap-3 mt-1">
-          <input
-            type="text"
-            value={message}
-            onChange={(e) => setMessage(e.target.value)}
-            onKeyPress={(e) => e.key === 'Enter' && sendMessage()}
-            placeholder="Type a message..."
-            className={`flex-1 rounded-xl px-4 py-3 text-base outline-none transition border ${colors.border} ${colors.input} ${colors.text} shadow-sm`}
-          />
-          <button
-            onClick={sendMessage}
-            className="rounded-xl px-4 py-3 font-medium text-base flex items-center gap-2 shadow-sm bg-yellow-700 text-white hover:bg-yellow-800 transition"
-            title="Send"
-          >
-            <FiSend size={22} />
-          </button>
-        </div>
-
-        {/* Fullscreen Video */}
+      {/* Fullscreen Video Modal */}
+      <AnimatePresence>
         {isFullScreen && fullScreenVideoSrc && (
-          <div className="fixed top-0 left-0 w-screen h-screen bg-black/80 z-[9999] flex items-center justify-center">
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/90 z-50 flex items-center justify-center p-8"
+          >
             <button
               onClick={closeFullScreen}
-              className={`absolute top-8 right-8 rounded-xl p-3 cursor-pointer shadow-lg ${colors.surface} flex items-center`}
-              title="Close"
+              className="absolute top-6 right-6 p-3 rounded-full bg-white/10 text-white hover:bg-white/20 transition-colors"
             >
-              <FiX size={28} className={colors.icon} />
+              <X size={24} />
             </button>
-            {fullScreenVideoSrc instanceof MediaStream ? (
-              <video
-                ref={el => {
-                  if (el && fullScreenVideoSrc) el.srcObject = fullScreenVideoSrc;
-                }}
-                autoPlay
-                playsInline
-                muted
-                className="w-[80vw] h-[80vh] rounded-3xl bg-black shadow-2xl"
-              />
-            ) : (
-              <video
-                src={fullScreenVideoSrc}
-                autoPlay
-                playsInline
-                muted
-                className="w-[80vw] h-[80vh] rounded-3xl bg-black shadow-2xl"
-              />
-            )}
-          </div>
+            <motion.div
+              initial={{ scale: 0.9 }}
+              animate={{ scale: 1 }}
+              className="w-full max-w-6xl aspect-video bg-black rounded-3xl overflow-hidden shadow-2xl"
+            >
+              {fullScreenVideoSrc instanceof MediaStream ? (
+                <video
+                  ref={el => {
+                    if (el && fullScreenVideoSrc) el.srcObject = fullScreenVideoSrc;
+                  }}
+                  autoPlay
+                  playsInline
+                  muted
+                  className="w-full h-full object-contain"
+                />
+              ) : (
+                <video
+                  src={fullScreenVideoSrc}
+                  autoPlay
+                  playsInline
+                  muted
+                  className="w-full h-full object-contain"
+                />
+              )}
+            </motion.div>
+          </motion.div>
         )}
-      </div>
-      <DrawingCanvas />
-      <VideoHandDraw roomId={roomId} />
+      </AnimatePresence>
+
+      {/* AI Hand Draw Overlay */}
+      <AnimatePresence>
+        {showHandDraw && (
+          <VideoHandDraw roomId={roomId} onClose={() => setShowHandDraw(false)} />
+        )}
+      </AnimatePresence>
     </div>
   );
 };

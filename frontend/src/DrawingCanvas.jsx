@@ -1,38 +1,69 @@
 import React, { useRef, useEffect, useState } from "react";
 import { io } from "socket.io-client";
-import { SOCKET_URL } from "./lib/utils";
-import { useParams } from "react-router-dom";
+import { SOCKET_URL, cn } from "./lib/utils";
+import { useParams, useNavigate } from "react-router-dom";
 import { useTheme } from "./contexts/ThemeContext";
-
-const cloneCanvas = (canvas) => {
-  const temp = document.createElement("canvas");
-  temp.width = canvas.width;
-  temp.height = canvas.height;
-  temp.getContext("2d").drawImage(canvas, 0, 0);
-  return temp;
-};
+import { 
+  Pencil, Eraser, Square, Circle, Minus, Type, 
+  Undo, Redo, Trash2, Download, ArrowLeft, Save
+} from "lucide-react";
+import { motion } from "framer-motion";
+import { toast } from "react-toastify";
 
 const COLORS = [
-  "black", "red", "blue", "green", "orange", "purple", "gray",
-  "#FFD700", "#0C1844", "#F0F3F8", "#111426", "#FFB76B", "#4C9AFF"
+  "#000000", "#EF4444", "#3B82F6", "#10B981", 
+  "#F59E0B", "#8B5CF6", "#6B7280", "#FFFFFF"
 ];
-const TOOLS = ["pen", "eraser", "rect", "circle", "line", ];
 
 const DrawingCanvas = () => {
   const canvasRef = useRef(null);
   const previewCanvasRef = useRef(null);
   const socketRef = useRef(null);
+  const containerRef = useRef(null);
+  
   const [drawing, setDrawing] = useState(false);
   const [tool, setTool] = useState("pen");
-  const [color, setColor] = useState("black");
+  const [color, setColor] = useState("#000000");
   const [lineWidth, setLineWidth] = useState(2);
   const [startPos, setStartPos] = useState(null);
   const [textInput, setTextInput] = useState("");
   const [showTextInput, setShowTextInput] = useState(false);
+  const [textPos, setTextPos] = useState({ x: 0, y: 0 });
   const [undoStack, setUndoStack] = useState([]);
   const [redoStack, setRedoStack] = useState([]);
+  
   const { roomId } = useParams();
+  const navigate = useNavigate();
   const { theme } = useTheme();
+
+  // Initialize canvas size
+  useEffect(() => {
+    const handleResize = () => {
+      if (containerRef.current && canvasRef.current && previewCanvasRef.current) {
+        const { width, height } = containerRef.current.getBoundingClientRect();
+        
+        // Save current content
+        const tempCanvas = document.createElement('canvas');
+        tempCanvas.width = canvasRef.current.width;
+        tempCanvas.height = canvasRef.current.height;
+        tempCanvas.getContext('2d').drawImage(canvasRef.current, 0, 0);
+
+        // Resize
+        canvasRef.current.width = width;
+        canvasRef.current.height = height;
+        previewCanvasRef.current.width = width;
+        previewCanvasRef.current.height = height;
+
+        // Restore content
+        canvasRef.current.getContext('2d').drawImage(tempCanvas, 0, 0);
+      }
+    };
+
+    window.addEventListener('resize', handleResize);
+    handleResize();
+
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
 
   // Socket setup
   useEffect(() => {
@@ -54,10 +85,8 @@ const DrawingCanvas = () => {
     return () => {
       socketRef.current.disconnect();
     };
-    // eslint-disable-next-line
   }, [roomId]);
 
-  // Save canvas state for undo
   const pushUndo = () => {
     const canvas = canvasRef.current;
     const temp = document.createElement("canvas");
@@ -68,7 +97,53 @@ const DrawingCanvas = () => {
     setRedoStack([]);
   };
 
-  // Drawing functions
+  const handleUndo = () => {
+    if (undoStack.length === 0) return;
+    const canvas = canvasRef.current;
+    const ctx = canvas.getContext("2d");
+    const lastState = undoStack[undoStack.length - 1];
+    
+    // Save current state to redo stack
+    const currentTemp = document.createElement("canvas");
+    currentTemp.width = canvas.width;
+    currentTemp.height = canvas.height;
+    currentTemp.getContext("2d").drawImage(canvas, 0, 0);
+    setRedoStack((stack) => [...stack, currentTemp]);
+
+    // Restore last state
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.drawImage(lastState, 0, 0);
+    setUndoStack((stack) => stack.slice(0, -1));
+    
+    // Sync with others
+    const dataURL = canvas.toDataURL();
+    socketRef.current.emit("syncCanvas", { image: dataURL, roomId });
+  };
+
+  const handleRedo = () => {
+    if (redoStack.length === 0) return;
+    const canvas = canvasRef.current;
+    const ctx = canvas.getContext("2d");
+    const nextState = redoStack[redoStack.length - 1];
+
+    // Save current state to undo stack
+    const currentTemp = document.createElement("canvas");
+    currentTemp.width = canvas.width;
+    currentTemp.height = canvas.height;
+    currentTemp.getContext("2d").drawImage(canvas, 0, 0);
+    setUndoStack((stack) => [...stack, currentTemp]);
+
+    // Restore next state
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.drawImage(nextState, 0, 0);
+    setRedoStack((stack) => stack.slice(0, -1));
+
+    // Sync with others
+    const dataURL = canvas.toDataURL();
+    socketRef.current.emit("syncCanvas", { image: dataURL, roomId });
+  };
+
+  // Drawing primitives
   const drawLine = (x0, y0, x1, y1, color, width, emit = true) => {
     const ctx = canvasRef.current.getContext("2d");
     ctx.strokeStyle = color;
@@ -82,10 +157,7 @@ const DrawingCanvas = () => {
     ctx.closePath();
 
     if (emit) {
-      socketRef.current.emit("draw", {
-        type: "line",
-        x0, y0, x1, y1, color, width, roomId
-      });
+      socketRef.current.emit("draw", { type: "line", x0, y0, x1, y1, color, width, roomId });
     }
   };
 
@@ -96,10 +168,7 @@ const DrawingCanvas = () => {
     ctx.strokeRect(x0, y0, x1 - x0, y1 - y0);
 
     if (emit) {
-      socketRef.current.emit("draw", {
-        type: "rect",
-        x0, y0, x1, y1, color, width, roomId
-      });
+      socketRef.current.emit("draw", { type: "rect", x0, y0, x1, y1, color, width, roomId });
     }
   };
 
@@ -114,24 +183,18 @@ const DrawingCanvas = () => {
     ctx.closePath();
 
     if (emit) {
-      socketRef.current.emit("draw", {
-        type: "circle",
-        x0, y0, x1, y1, color, width, roomId
-      });
+      socketRef.current.emit("draw", { type: "circle", x0, y0, x1, y1, color, width, roomId });
     }
   };
 
   const drawText = (x, y, text, color, emit = true) => {
     const ctx = canvasRef.current.getContext("2d");
     ctx.fillStyle = color;
-    ctx.font = "20px Inter, Poppins, sans-serif";
+    ctx.font = "20px Inter, sans-serif";
     ctx.fillText(text, x, y);
 
     if (emit) {
-      socketRef.current.emit("draw", {
-        type: "text",
-        x, y, text, color, roomId
-      });
+      socketRef.current.emit("draw", { type: "text", x, y, text, color, roomId });
     }
   };
 
@@ -140,37 +203,21 @@ const DrawingCanvas = () => {
     ctx.clearRect(x - width / 2, y - width / 2, width, width);
 
     if (emit) {
-      socketRef.current.emit("draw", {
-        type: "erase",
-        x, y, width, roomId
-      });
+      socketRef.current.emit("draw", { type: "erase", x, y, width, roomId });
     }
   };
 
-  // Remote draw handler
   const drawRemote = (data) => {
     switch (data.type) {
-      case "line":
-        drawLine(data.x0, data.y0, data.x1, data.y1, data.color, data.width, false);
-        break;
-      case "rect":
-        drawRect(data.x0, data.y0, data.x1, data.y1, data.color, data.width, false);
-        break;
-      case "circle":
-        drawCircle(data.x0, data.y0, data.x1, data.y1, data.color, data.width, false);
-        break;
-      case "text":
-        drawText(data.x, data.y, data.text, data.color, false);
-        break;
-      case "erase":
-        erase(data.x, data.y, data.width, false);
-        break;
-      default:
-        break;
+      case "line": drawLine(data.x0, data.y0, data.x1, data.y1, data.color, data.width, false); break;
+      case "rect": drawRect(data.x0, data.y0, data.x1, data.y1, data.color, data.width, false); break;
+      case "circle": drawCircle(data.x0, data.y0, data.x1, data.y1, data.color, data.width, false); break;
+      case "text": drawText(data.x, data.y, data.text, data.color, false); break;
+      case "erase": erase(data.x, data.y, data.width, false); break;
+      default: break;
     }
   };
 
-  // Sync canvas from image data
   const syncCanvas = (image) => {
     const ctx = canvasRef.current.getContext("2d");
     const img = new window.Image();
@@ -181,46 +228,33 @@ const DrawingCanvas = () => {
     img.src = image;
   };
 
-  // Preview drawing for shapes
-  const drawPreview = (x0, y0, x1, y1, tool) => {
-    const previewCtx = previewCanvasRef.current.getContext("2d");
-    previewCtx.clearRect(0, 0, previewCanvasRef.current.width, previewCanvasRef.current.height);
-    previewCtx.strokeStyle = color;
-    previewCtx.lineWidth = lineWidth;
-    previewCtx.globalAlpha = 0.5;
-
-    if (tool === "rect") {
-      previewCtx.strokeRect(x0, y0, x1 - x0, y1 - y0);
-    } else if (tool === "circle") {
-      const radius = Math.sqrt(Math.pow(x1 - x0, 2) + Math.pow(y1 - y0, 2));
-      previewCtx.beginPath();
-      previewCtx.arc(x0, y0, radius, 0, 2 * Math.PI);
-      previewCtx.stroke();
-      previewCtx.closePath();
-    } else if (tool === "line") {
-      previewCtx.beginPath();
-      previewCtx.moveTo(x0, y0);
-      previewCtx.lineTo(x1, y1);
-      previewCtx.stroke();
-      previewCtx.closePath();
+  const clearCanvas = (emit = true) => {
+    const ctx = canvasRef.current.getContext("2d");
+    ctx.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height);
+    if (emit) {
+      socketRef.current.emit("clearCanvas", { roomId });
     }
-    previewCtx.globalAlpha = 1.0;
   };
 
-  // Mouse events
   const handleMouseDown = (e) => {
-    if (tool !== "text") {
-      pushUndo();
-    }
-    setDrawing(true);
     const rect = canvasRef.current.getBoundingClientRect();
     const x = e.clientX - rect.left;
     const y = e.clientY - rect.top;
-    setStartPos({ x, y });
 
     if (tool === "text") {
+      setTextPos({ x, y });
       setShowTextInput(true);
-      setTextInput("");
+      return;
+    }
+
+    setDrawing(true);
+    setStartPos({ x, y });
+    pushUndo();
+
+    if (tool === "pen" || tool === "eraser") {
+      const ctx = canvasRef.current.getContext("2d");
+      ctx.beginPath();
+      ctx.moveTo(x, y);
     }
   };
 
@@ -231,24 +265,38 @@ const DrawingCanvas = () => {
     const y = e.clientY - rect.top;
 
     if (tool === "pen") {
-      drawLine(startPos.x, startPos.y, x, y, color, lineWidth, true);
+      drawLine(startPos.x, startPos.y, x, y, color, lineWidth);
       setStartPos({ x, y });
     } else if (tool === "eraser") {
-      erase(x, y, 20, true);
-      setStartPos({ x, y });
-    } else if (tool === "rect" || tool === "circle" || tool === "line") {
-      drawPreview(startPos.x, startPos.y, x, y, tool);
+      erase(x, y, lineWidth * 5);
+    } else {
+      // Preview shapes
+      const ctx = previewCanvasRef.current.getContext("2d");
+      ctx.clearRect(0, 0, previewCanvasRef.current.width, previewCanvasRef.current.height);
+      ctx.strokeStyle = color;
+      ctx.lineWidth = lineWidth;
+      ctx.globalAlpha = 0.5;
+
+      if (tool === "rect") {
+        ctx.strokeRect(startPos.x, startPos.y, x - startPos.x, y - startPos.y);
+      } else if (tool === "circle") {
+        const radius = Math.sqrt(Math.pow(x - startPos.x, 2) + Math.pow(y - startPos.y, 2));
+        ctx.beginPath();
+        ctx.arc(startPos.x, startPos.y, radius, 0, 2 * Math.PI);
+        ctx.stroke();
+      } else if (tool === "line") {
+        ctx.beginPath();
+        ctx.moveTo(startPos.x, startPos.y);
+        ctx.lineTo(x, y);
+        ctx.stroke();
+      }
     }
   };
 
   const handleMouseUp = (e) => {
     if (!drawing) return;
     setDrawing(false);
-
-    if (tool === "text") {
-      return;
-    }
-
+    
     const rect = canvasRef.current.getBoundingClientRect();
     const x = e.clientX - rect.left;
     const y = e.clientY - rect.top;
@@ -257,263 +305,161 @@ const DrawingCanvas = () => {
     const previewCtx = previewCanvasRef.current.getContext("2d");
     previewCtx.clearRect(0, 0, previewCanvasRef.current.width, previewCanvasRef.current.height);
 
-    if (tool === "rect") {
-      drawRect(startPos.x, startPos.y, x, y, color, lineWidth, true);
-    } else if (tool === "circle") {
-      drawCircle(startPos.x, startPos.y, x, y, color, lineWidth, true);
-    } else if (tool === "line") {
-      drawLine(startPos.x, startPos.y, x, y, color, lineWidth, true);
-    }
-
-    setStartPos(null);
+    // Finalize shape
+    if (tool === "rect") drawRect(startPos.x, startPos.y, x, y, color, lineWidth);
+    else if (tool === "circle") drawCircle(startPos.x, startPos.y, x, y, color, lineWidth);
+    else if (tool === "line") drawLine(startPos.x, startPos.y, x, y, color, lineWidth);
   };
 
-  // Text input handler
   const handleTextSubmit = () => {
-    if (showTextInput && startPos && textInput.trim()) {
+    if (textInput.trim()) {
+      drawText(textPos.x, textPos.y, textInput, color);
       pushUndo();
-      drawText(startPos.x, startPos.y, textInput, color, true);
-      // Sync canvas after text
-      const image = canvasRef.current.toDataURL();
-      socketRef.current.emit("syncCanvas", { roomId, image });
     }
     setShowTextInput(false);
     setTextInput("");
-    setStartPos(null);
-    setDrawing(false);
   };
 
-  // Undo/Redo
-const handleUndo = (emit = true) => {
-  if (undoStack.length === 0) return;
-  
-  // Save current canvas state to redo stack
-  const currentCanvas = cloneCanvas(canvasRef.current);
-  setRedoStack((stack) => [...stack, currentCanvas]);
-  
-  // Get previous state
-  const prev = undoStack[undoStack.length - 1];
-  
-  // Apply it to canvas
-  const ctx = canvasRef.current.getContext("2d");
-  ctx.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height);
-  ctx.drawImage(prev, 0, 0);
-  
-  // Remove from undo stack
-  setUndoStack((stack) => stack.slice(0, -1));
-  
-  if (emit) {
-    // Use setTimeout to ensure canvas is fully rendered before getting data
-    setTimeout(() => {
-      const image = canvasRef.current.toDataURL();
-      socketRef.current.emit("syncCanvas", { roomId, image });
-    }, 0);
-  }
-};
-
-const handleRedo = (emit = true) => {
-  if (redoStack.length === 0) return;
-  
-  // Save current canvas state to undo stack
-  const currentCanvas = cloneCanvas(canvasRef.current);
-  setUndoStack((stack) => [...stack, currentCanvas]);
-  
-  // Get next state from redo stack
-  const next = redoStack[redoStack.length - 1];
-  
-  // Apply it to canvas
-  const ctx = canvasRef.current.getContext("2d");
-  ctx.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height);
-  ctx.drawImage(next, 0, 0);
-  
-  // Remove from redo stack
-  setRedoStack((stack) => stack.slice(0, -1));
-  
-  if (emit) {
-    // Use setTimeout to ensure canvas is fully rendered before getting data
-    setTimeout(() => {
-      const image = canvasRef.current.toDataURL();
-      socketRef.current.emit("syncCanvas", { roomId, image });
-    }, 0);
-  }
-};
-
-  // Touch events for mobile
-  const handleTouchStart = (e) => {
-    e.preventDefault();
-    const touch = e.touches[0];
-    handleMouseDown({
-      clientX: touch.clientX,
-      clientY: touch.clientY,
-      preventDefault: () => {},
-    });
-  };
-
-  const handleTouchMove = (e) => {
-    e.preventDefault();
-    const touch = e.touches[0];
-    handleMouseMove({
-      clientX: touch.clientX,
-      clientY: touch.clientY,
-      preventDefault: () => {},
-    });
-  };
-
-  const handleTouchEnd = (e) => {
-    e.preventDefault();
-    handleMouseUp({
-      clientX: 0,
-      clientY: 0,
-      preventDefault: () => {},
-    });
-  };
-
-  // Clear canvas (local and remote)
-  const clearCanvas = (emit = true) => {
-    const ctx = canvasRef.current.getContext("2d");
-    ctx.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height);
-    const previewCtx = previewCanvasRef.current.getContext("2d");
-    previewCtx.clearRect(0, 0, previewCanvasRef.current.width, previewCanvasRef.current.height);
-    setUndoStack([]);
-    setRedoStack([]);
-    if (emit) {
-      socketRef.current.emit("clearCanvas", { roomId });
-      // Also sync blank canvas
-      const image = canvasRef.current.toDataURL();
-      socketRef.current.emit("syncCanvas", { roomId, image });
-    }
-  };
-
-  // Fix dropdown text color for theme
-  const selectStyle = {
-    background: theme.colors.surface,
-    color: theme.colors.textPrimary,
-    border: `1px solid ${theme.colors.border}`,
-    borderRadius: 4,
-    padding: "4px 8px",
-    fontSize: "16px",
-    outline: "none",
-    marginRight: 8,
-  };
-
-  const buttonStyle = {
-    background: theme.colors.surface,
-    color: theme.colors.textPrimary,
-    border: `1px solid ${theme.colors.border}`,
-    borderRadius: 4,
-    padding: "4px 12px",
-    fontSize: "14px",
-    cursor: "pointer",
+  const downloadCanvas = () => {
+    const link = document.createElement("a");
+    link.download = `drawing-${Date.now()}.png`;
+    link.href = canvasRef.current.toDataURL();
+    link.click();
   };
 
   return (
-    <div style={{ width: 620, margin: "20px auto" }}>
-      <div style={{ display: "flex", gap: 8, marginBottom: 8, flexWrap: "wrap" }}>
-        <select value={tool} onChange={e => setTool(e.target.value)} style={selectStyle}>
-          {TOOLS.map(t => (
-            <option key={t} value={t} style={{ color: theme.colors.textPrimary, background: theme.colors.surface }}>
-              {t.charAt(0).toUpperCase() + t.slice(1)}
-            </option>
-          ))}
-        </select>
-        <select value={color} onChange={e => setColor(e.target.value)} style={selectStyle}>
-          {COLORS.map(c => (
-            <option key={c} value={c} style={{ color: c, background: theme.colors.surface }}>
-              {c.charAt(0) === "#" ? c : c.charAt(0).toUpperCase() + c.slice(1)}
-            </option>
-          ))}
-        </select>
-        <input
-          type="range"
-          min={1}
-          max={10}
-          value={lineWidth}
-          onChange={e => setLineWidth(Number(e.target.value))}
-          style={{ width: 80 }}
-        />
-        <button onClick={() => handleUndo(true)} disabled={undoStack.length === 0} style={buttonStyle}>Undo</button>
-        <button onClick={() => handleRedo(true)} disabled={redoStack.length === 0} style={buttonStyle}>Redo</button>
-        <button onClick={() => clearCanvas(true)} style={buttonStyle}>Clear</button>
-      </div>
-      <div style={{ position: "relative" }}>
-        <canvas
-          ref={canvasRef}
-          width={600}
-          height={400}
-          style={{ 
-            border: "2px solid #222", 
-            background: "#fff", 
-            borderRadius: "12px",
-            position: "absolute",
-            top: 0,
-            left: 0
-          }}
-        />
-        <canvas
-          ref={previewCanvasRef}
-          width={600}
-          height={400}
-          style={{ 
-            border: "2px solid #222", 
-            borderRadius: "12px",
-            position: "absolute",
-            top: 0,
-            left: 0,
-            pointerEvents: "none"
-          }}
-        />
-        <div
-          style={{
-            width: 600,
-            height: 400,
-            position: "relative",
-            cursor: "crosshair"
-          }}
-          onMouseDown={handleMouseDown}
-          onMouseMove={handleMouseMove}
-          onMouseUp={handleMouseUp}
-          onMouseLeave={handleMouseUp}
-          onTouchStart={handleTouchStart}
-          onTouchMove={handleTouchMove}
-          onTouchEnd={handleTouchEnd}
-        />
-        {showTextInput && startPos && (
-          <div
-            style={{
-              position: "absolute",
-              left: startPos.x,
-              top: startPos.y,
-              zIndex: 10,
-            }}
+    <div className="h-screen w-full bg-bg-canvas flex flex-col overflow-hidden">
+      {/* Header */}
+      <div className="h-16 border-b border-border-subtle bg-bg-surface flex items-center justify-between px-6 shrink-0 z-10">
+        <div className="flex items-center gap-4">
+          <button
+            onClick={() => navigate(`/room/${roomId}`)}
+            className="p-2 rounded-xl hover:bg-bg-canvas text-fg-secondary hover:text-fg-primary transition-colors"
           >
-            <input
-              type="text"
-              autoFocus
-              value={textInput}
-              onChange={e => setTextInput(e.target.value)}
-              style={{
-                fontSize: 20,
-                border: "2px solid #222",
-                borderRadius: 4,
-                padding: 4,
-                background: "#fff",
-                color: "#000",
-                minWidth: "200px"
-              }}
-              onKeyDown={e => {
-                if (e.key === "Enter") {
-                  handleTextSubmit();
-                } else if (e.key === "Escape") {
-                  setShowTextInput(false);
-                  setTextInput("");
-                  setStartPos(null);
-                  setDrawing(false);
-                }
-              }}
-              onBlur={handleTextSubmit}
-            />
+            <ArrowLeft size={20} />
+          </button>
+          <h1 className="font-serif text-xl font-medium text-fg-primary">Whiteboard</h1>
+        </div>
+
+        <div className="flex items-center gap-2">
+          <button onClick={handleUndo} className="p-2 rounded-lg hover:bg-bg-canvas text-fg-secondary hover:text-fg-primary" title="Undo">
+            <Undo size={20} />
+          </button>
+          <button onClick={handleRedo} className="p-2 rounded-lg hover:bg-bg-canvas text-fg-secondary hover:text-fg-primary" title="Redo">
+            <Redo size={20} />
+          </button>
+          <div className="w-px h-6 bg-border-subtle mx-2" />
+          <button onClick={() => clearCanvas()} className="p-2 rounded-lg hover:bg-red-50 text-fg-secondary hover:text-red-500" title="Clear">
+            <Trash2 size={20} />
+          </button>
+          <button onClick={downloadCanvas} className="p-2 rounded-lg hover:bg-bg-canvas text-fg-secondary hover:text-fg-primary" title="Download">
+            <Download size={20} />
+          </button>
+        </div>
+      </div>
+
+      {/* Main Area */}
+      <div className="flex-1 relative flex overflow-hidden">
+        {/* Toolbar */}
+        <div className="w-16 bg-bg-surface border-r border-border-subtle flex flex-col items-center py-4 gap-4 shrink-0 z-10">
+          <div className="flex flex-col gap-2 w-full px-2">
+            {[
+              { id: "pen", icon: Pencil, label: "Pen" },
+              { id: "eraser", icon: Eraser, label: "Eraser" },
+              { id: "rect", icon: Square, label: "Rectangle" },
+              { id: "circle", icon: Circle, label: "Circle" },
+              { id: "line", icon: Minus, label: "Line" },
+              { id: "text", icon: Type, label: "Text" },
+            ].map((t) => (
+              <button
+                key={t.id}
+                onClick={() => setTool(t.id)}
+                className={cn(
+                  "p-3 rounded-xl flex items-center justify-center transition-all duration-200",
+                  tool === t.id 
+                    ? "bg-accent-brand text-white shadow-lg shadow-accent-brand/25" 
+                    : "text-fg-secondary hover:bg-bg-canvas hover:text-fg-primary"
+                )}
+                title={t.label}
+              >
+                <t.icon size={20} />
+              </button>
+            ))}
           </div>
-        )}
+
+          <div className="w-8 h-px bg-border-subtle my-2" />
+
+          {/* Color Picker */}
+          <div className="flex flex-col gap-2">
+            {COLORS.map((c) => (
+              <button
+                key={c}
+                onClick={() => setColor(c)}
+                className={cn(
+                  "w-6 h-6 rounded-full border border-border-subtle transition-transform hover:scale-110",
+                  color === c && "ring-2 ring-offset-2 ring-accent-brand scale-110"
+                )}
+                style={{ backgroundColor: c }}
+              />
+            ))}
+          </div>
+
+          <div className="w-8 h-px bg-border-subtle my-2" />
+
+          {/* Line Width */}
+          <div className="flex flex-col items-center gap-2">
+            {[2, 4, 6, 8].map((w) => (
+              <button
+                key={w}
+                onClick={() => setLineWidth(w)}
+                className={cn(
+                  "w-6 h-6 rounded-full flex items-center justify-center hover:bg-bg-canvas",
+                  lineWidth === w && "bg-bg-canvas"
+                )}
+              >
+                <div 
+                  className={cn("rounded-full bg-fg-primary", lineWidth === w ? "bg-accent-brand" : "bg-fg-secondary")}
+                  style={{ width: w, height: w }}
+                />
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Canvas Container */}
+        <div ref={containerRef} className="flex-1 relative bg-white cursor-crosshair overflow-hidden">
+          <canvas
+            ref={canvasRef}
+            onMouseDown={handleMouseDown}
+            onMouseMove={handleMouseMove}
+            onMouseUp={handleMouseUp}
+            onMouseLeave={handleMouseUp}
+            className="absolute top-0 left-0 z-0"
+          />
+          <canvas
+            ref={previewCanvasRef}
+            className="absolute top-0 left-0 z-1 pointer-events-none"
+          />
+
+          {/* Text Input Overlay */}
+          {showTextInput && (
+            <div
+              className="absolute z-20 bg-white p-2 rounded-lg shadow-xl border border-border-subtle"
+              style={{ left: textPos.x, top: textPos.y }}
+            >
+              <input
+                autoFocus
+                type="text"
+                value={textInput}
+                onChange={(e) => setTextInput(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && handleTextSubmit()}
+                onBlur={handleTextSubmit}
+                className="border border-border-subtle rounded px-2 py-1 outline-none focus:border-accent-brand"
+                placeholder="Type here..."
+              />
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );

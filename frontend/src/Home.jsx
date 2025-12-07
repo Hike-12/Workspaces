@@ -1,28 +1,16 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { API_ENDPOINTS } from "./lib/utils";
-import { Users, Video, MessageCircle, Upload,Moon,Sun } from "lucide-react";
+import { API_ENDPOINTS, cn } from "./lib/utils";
+import { Users, Video, MessageCircle, Upload, Moon, Sun, ArrowRight, LayoutGrid, ShieldCheck } from "lucide-react";
 import { ToastContainer, toast } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
 import { v4 as uuidv4 } from "uuid";
 import { useTheme } from "./contexts/ThemeContext";
+import { motion, AnimatePresence } from "framer-motion";
 
 const Home = () => {
   const navigate = useNavigate();
   const { theme, toggleTheme } = useTheme();
-
-  // Chat theme design principles
-  const colors = theme.colors || {
-    background: theme.name === "dark" ? "bg-neutral-900" : "bg-neutral-50",
-    surface: theme.name === "dark" ? "bg-neutral-800" : "bg-white",
-    accent: theme.name === "dark" ? "bg-yellow-900" : "bg-yellow-100",
-    text: theme.name === "dark" ? "text-neutral-100" : "text-neutral-800",
-    border: theme.name === "dark" ? "border-neutral-700" : "border-neutral-200",
-    primary: theme.name === "dark" ? "text-yellow-400" : "text-yellow-700",
-    secondary: theme.name === "dark" ? "bg-yellow-900" : "bg-yellow-50",
-    icon: theme.name === "dark" ? "text-yellow-400" : "text-yellow-700",
-    input: theme.name === "dark" ? "bg-neutral-800" : "bg-neutral-100",
-  };
 
   const [formData, setFormData] = useState({
     userName: "",
@@ -102,138 +90,215 @@ const Home = () => {
     }
   };
 
+  const containerVariants = {
+    hidden: { opacity: 0 },
+    show: {
+      opacity: 1,
+      transition: {
+        staggerChildren: 0.1,
+        delayChildren: 0.2
+      }
+    }
+  };
+
+  const itemVariants = {
+    hidden: { opacity: 0, y: 20 },
+    show: { opacity: 1, y: 0, transition: { type: "spring", stiffness: 300, damping: 30 } }
+  };
+
   return (
-    <div className={`min-h-screen w-full flex flex-col items-center justify-center ${colors.background} ${colors.text} font-inter`}>
-      <ToastContainer position="top-right" theme={theme.name === "dark" ? "dark" : "light"} />
-      <div className={`w-full max-w-2xl mx-auto my-8 rounded-3xl shadow-lg ${colors.surface} px-8 py-8 flex flex-col gap-8`}>
-        {/* Header */}
-        <div className="flex flex-col items-center mb-8">
-          <div className={`h-16 w-16 rounded-2xl flex items-center justify-center shadow-lg mb-6 ${colors.input}`}>
-            <Video className={`h-8 w-8 ${colors.icon}`} />
+    <div className="min-h-screen w-full bg-bg-canvas text-fg-primary font-sans selection:bg-accent-brand selection:text-white overflow-x-hidden">
+      <ToastContainer position="top-right" theme={theme} />
+      
+      {/* Navbar */}
+      <nav className="w-full px-6 py-6 flex justify-between items-center max-w-7xl mx-auto">
+        <div className="flex items-center gap-2">
+          <div className="h-8 w-8 bg-accent-brand rounded-lg flex items-center justify-center text-white">
+            <LayoutGrid size={18} />
           </div>
-          <h1 className={`text-4xl font-bold mb-3 ${colors.primary}`}>Focal Point</h1>
-          <p className={`text-lg ${colors.text}`}>Connect, chat, and collaborate in real-time</p>
+          <span className="font-serif text-xl font-bold tracking-tight">Workspaces</span>
         </div>
+        <button
+          onClick={toggleTheme}
+          className="p-2 rounded-full hover:bg-bg-surface border border-transparent hover:border-border-subtle transition-all duration-200"
+        >
+          {theme === "dark" ? <Sun size={20} /> : <Moon size={20} />}
+        </button>
+      </nav>
 
-        {/* Features */}
-        <div className="grid grid-cols-3 gap-4 mb-8">
-          <div className={`text-center p-4 rounded-xl ${colors.input}`}>
-            <Video className={`h-8 w-8 mx-auto mb-2 ${colors.icon}`} />
-            <p className={`text-sm font-medium ${colors.primary}`}>Video Chat</p>
-          </div>
-          <div className={`text-center p-4 rounded-xl ${colors.input}`}>
-            <MessageCircle className={`h-8 w-8 mx-auto mb-2 ${colors.icon}`} />
-            <p className={`text-sm font-medium ${colors.primary}`}>Real-time Chat</p>
-          </div>
-          <div className={`text-center p-4 rounded-xl ${colors.input}`}>
-            <Upload className={`h-8 w-8 mx-auto mb-2 ${colors.icon}`} />
-            <p className={`text-sm font-medium ${colors.primary}`}>File Sharing</p>
-          </div>
-        </div>
+      <main className="max-w-7xl mx-auto px-6 py-12 lg:py-20 grid lg:grid-cols-12 gap-12 items-start">
+        
+        {/* Left Column: Hero & Bento Grid */}
+        <motion.div 
+          className="lg:col-span-7 flex flex-col gap-8"
+          variants={containerVariants}
+          initial="hidden"
+          animate="show"
+        >
+          <motion.div variants={itemVariants}>
+            <h1 className="font-serif text-5xl lg:text-7xl font-medium leading-[1.1] mb-6">
+              Collaborate <br/>
+              <span className="text-fg-secondary">without limits.</span>
+            </h1>
+            <p className="text-lg text-fg-secondary max-w-md leading-relaxed">
+              A unified workspace for video conferencing, real-time chat, and file sharing. Designed for humans, built for speed.
+            </p>
+          </motion.div>
 
-        {/* Form */}
-        <div className={`rounded-2xl p-8 shadow-xl ${colors.surface} border ${colors.border}`}>
-          <div className={`flex mb-6 gap-2 p-1 rounded-xl ${colors.input}`}>
-            <button
-              onClick={() => setIsCreating(false)}
-              className={`flex-1 py-3 px-4 rounded-lg font-semibold transition-all duration-200`}
-              style={{
-                background: !isCreating ? theme.name === "dark" ? "#FFD700" : "#0C1844" : "transparent",
-                color: !isCreating ? theme.name === "dark" ? "#0C1844" : "#FFF5E1" : "",
-              }}
-            >
-              Join Room
-            </button>
-            <button
-              onClick={() => setIsCreating(true)}
-              className={`flex-1 py-3 px-4 rounded-lg font-semibold transition-all duration-200`}
-              style={{
-                background: isCreating ? theme.name === "dark" ? "#FFD700" : "#0C1844" : "transparent",
-                color: isCreating ? theme.name === "dark" ? "#0C1844" : "#FFF5E1" : "",
-              }}
-            >
-              Create Room
-            </button>
-            <button
-              title="Toggle Theme"
-              onClick={toggleTheme}
-              className={`ml-2 rounded-lg p-2 flex items-center border-none ${colors.input}`}
-            >
-              {theme.name === "dark" ? (
-                <Sun size={22} className={colors.icon} />
-              ) : (
-                <Moon size={22} className={colors.icon} />
-              )}
-            </button>
-          </div>
-
-          <form onSubmit={isCreating ? createRoom : joinRoom} className="space-y-5">
-            <div>
-              <label className={`block text-sm font-semibold mb-2 ${colors.text}`}>Your Name *</label>
-              <input
-                type="text"
-                name="userName"
-                value={formData.userName}
-                onChange={handleInputChange}
-                className={`w-full px-4 py-3 rounded-lg border transition-all duration-200 focus:ring-2 focus:ring-yellow-200 ${colors.input} ${colors.text} ${colors.border}`}
-                placeholder="Enter your name"
-                required
-              />
-            </div>
-            <div>
-              <label className={`block text-sm font-semibold mb-2 ${colors.text}`}>Room Name *</label>
-              <input
-                type="text"
-                name="roomName"
-                value={formData.roomName}
-                onChange={handleInputChange}
-                className={`w-full px-4 py-3 rounded-lg border transition-all duration-200 focus:ring-2 focus:ring-yellow-200 ${colors.input} ${colors.text} ${colors.border}`}
-                placeholder="Enter room name"
-                required
-              />
-            </div>
-            <div>
-              <label className={`block text-sm font-semibold mb-2 ${colors.text}`}>Password *</label>
-              <input
-                type="password"
-                name="password"
-                value={formData.password}
-                onChange={handleInputChange}
-                className={`w-full px-4 py-3 rounded-lg border transition-all duration-200 focus:ring-2 focus:ring-yellow-200 ${colors.input} ${colors.text} ${colors.border}`}
-                placeholder="Enter room password"
-                required
-              />
-            </div>
-            {isCreating && (
+          {/* Bento Grid */}
+          <motion.div 
+            className="grid grid-cols-1 md:grid-cols-2 gap-4 w-full"
+            variants={itemVariants}
+          >
+            <div className="bg-bg-surface border border-border-subtle p-6 rounded-3xl flex flex-col gap-4 hover:shadow-lg transition-shadow duration-300">
+              <div className="h-10 w-10 rounded-full bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center text-blue-600 dark:text-blue-400">
+                <Video size={20} />
+              </div>
               <div>
-                <label className={`block text-sm font-semibold mb-2 ${colors.text}`}>Description (Optional)</label>
-                <textarea
-                  name="description"
-                  value={formData.description}
+                <h3 className="font-serif text-xl font-medium mb-1">HD Video</h3>
+                <p className="text-sm text-fg-secondary">Crystal clear video calls with low latency.</p>
+              </div>
+            </div>
+
+            <div className="bg-bg-surface border border-border-subtle p-6 rounded-3xl flex flex-col gap-4 hover:shadow-lg transition-shadow duration-300">
+              <div className="h-10 w-10 rounded-full bg-green-100 dark:bg-green-900/30 flex items-center justify-center text-green-600 dark:text-green-400">
+                <MessageCircle size={20} />
+              </div>
+              <div>
+                <h3 className="font-serif text-xl font-medium mb-1">Live Chat</h3>
+                <p className="text-sm text-fg-secondary">Instant messaging with rich text support.</p>
+              </div>
+            </div>
+
+            <div className="md:col-span-2 bg-bg-surface border border-border-subtle p-6 rounded-3xl flex flex-row items-center gap-6 hover:shadow-lg transition-shadow duration-300">
+              <div className="h-12 w-12 rounded-full bg-purple-100 dark:bg-purple-900/30 flex items-center justify-center text-purple-600 dark:text-purple-400 shrink-0">
+                <Upload size={24} />
+              </div>
+              <div>
+                <h3 className="font-serif text-xl font-medium mb-1">Secure File Sharing</h3>
+                <p className="text-sm text-fg-secondary">Share documents and media securely within your room.</p>
+              </div>
+            </div>
+          </motion.div>
+        </motion.div>
+
+        {/* Right Column: Auth Form */}
+        <motion.div 
+          className="lg:col-span-5 w-full"
+          initial={{ opacity: 0, x: 20 }}
+          animate={{ opacity: 1, x: 0 }}
+          transition={{ delay: 0.4, duration: 0.5 }}
+        >
+          <div className="bg-bg-surface border border-border-subtle rounded-[2rem] p-8 shadow-xl shadow-black/5">
+            
+            {/* Tabs */}
+            <div className="flex p-1 bg-bg-canvas rounded-xl mb-8">
+              <button
+                onClick={() => setIsCreating(false)}
+                className={cn(
+                  "flex-1 py-2.5 text-sm font-medium rounded-lg transition-all duration-200",
+                  !isCreating ? "bg-bg-surface text-fg-primary shadow-sm" : "text-fg-secondary hover:text-fg-primary"
+                )}
+              >
+                Join Room
+              </button>
+              <button
+                onClick={() => setIsCreating(true)}
+                className={cn(
+                  "flex-1 py-2.5 text-sm font-medium rounded-lg transition-all duration-200",
+                  isCreating ? "bg-bg-surface text-fg-primary shadow-sm" : "text-fg-secondary hover:text-fg-primary"
+                )}
+              >
+                Create Room
+              </button>
+            </div>
+
+            <form onSubmit={isCreating ? createRoom : joinRoom} className="flex flex-col gap-5">
+              <div className="space-y-1.5">
+                <label className="text-sm font-medium text-fg-secondary ml-1">Display Name</label>
+                <input
+                  type="text"
+                  name="userName"
+                  value={formData.userName}
                   onChange={handleInputChange}
-                  className={`w-full px-4 py-3 rounded-lg border resize-none transition-all duration-200 focus:ring-2 focus:ring-yellow-200 ${colors.input} ${colors.text} ${colors.border}`}
-                  placeholder="Room description"
-                  rows="3"
+                  className="w-full px-4 py-3 rounded-xl bg-bg-canvas border border-border-subtle focus:border-accent-brand focus:ring-2 focus:ring-accent-brand/20 outline-none transition-all duration-200"
+                  placeholder="John Doe"
+                  required
                 />
               </div>
-            )}
-            <button
-              type="submit"
-              disabled={loading}
-              className={`w-full py-4 rounded-lg font-bold transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center shadow-lg hover:shadow-xl ${colors.primary} ${theme.name === "dark" ? "bg-yellow-700 text-white" : "bg-yellow-700 text-white"}`}
-            >
-              {loading ? (
-                "Processing..."
-              ) : (
-                <>
-                  <Users className="w-5 h-5 mr-2" />
-                  {isCreating ? "Create Room" : "Join Room"}
-                </>
-              )}
-            </button>
-          </form>
-        </div>
-      </div>
+
+              <div className="space-y-1.5">
+                <label className="text-sm font-medium text-fg-secondary ml-1">Room Name</label>
+                <input
+                  type="text"
+                  name="roomName"
+                  value={formData.roomName}
+                  onChange={handleInputChange}
+                  className="w-full px-4 py-3 rounded-xl bg-bg-canvas border border-border-subtle focus:border-accent-brand focus:ring-2 focus:ring-accent-brand/20 outline-none transition-all duration-200"
+                  placeholder="Project Alpha"
+                  required
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-sm font-medium text-fg-secondary ml-1">Password</label>
+                <div className="relative">
+                  <input
+                    type="password"
+                    name="password"
+                    value={formData.password}
+                    onChange={handleInputChange}
+                    className="w-full px-4 py-3 rounded-xl bg-bg-canvas border border-border-subtle focus:border-accent-brand focus:ring-2 focus:ring-accent-brand/20 outline-none transition-all duration-200"
+                    placeholder="••••••••"
+                    required
+                  />
+                  <ShieldCheck className="absolute right-4 top-1/2 -translate-y-1/2 text-fg-secondary/50" size={18} />
+                </div>
+              </div>
+
+              <AnimatePresence>
+                {isCreating && (
+                  <motion.div
+                    initial={{ height: 0, opacity: 0 }}
+                    animate={{ height: "auto", opacity: 1 }}
+                    exit={{ height: 0, opacity: 0 }}
+                    className="overflow-hidden"
+                  >
+                    <div className="space-y-1.5 pt-1">
+                      <label className="text-sm font-medium text-fg-secondary ml-1">Description</label>
+                      <textarea
+                        name="description"
+                        value={formData.description}
+                        onChange={handleInputChange}
+                        className="w-full px-4 py-3 rounded-xl bg-bg-canvas border border-border-subtle focus:border-accent-brand focus:ring-2 focus:ring-accent-brand/20 outline-none transition-all duration-200 resize-none"
+                        placeholder="What's this room about?"
+                        rows="3"
+                      />
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+
+              <motion.button
+                whileHover={{ scale: 1.02 }}
+                whileTap={{ scale: 0.98 }}
+                type="submit"
+                disabled={loading}
+                className="mt-2 w-full py-3.5 rounded-xl bg-accent-brand text-white font-medium shadow-lg shadow-accent-brand/25 hover:shadow-xl hover:shadow-accent-brand/30 transition-all duration-200 flex items-center justify-center gap-2 disabled:opacity-70 disabled:cursor-not-allowed"
+              >
+                {loading ? (
+                  "Processing..."
+                ) : (
+                  <>
+                    {isCreating ? "Create Workspace" : "Join Workspace"}
+                    <ArrowRight size={18} />
+                  </>
+                )}
+              </motion.button>
+            </form>
+          </div>
+        </motion.div>
+      </main>
     </div>
   );
 };
