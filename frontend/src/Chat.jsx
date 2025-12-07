@@ -731,7 +731,7 @@ const Chat = () => {
                     key={msg._id || index}
                     className={cn(
                       "flex flex-col max-w-[80%]",
-                      isMe ? "self-end items-end" : "self-start items-start"
+                      isMe ? "self-end items-end ml-auto" : "self-start items-start"
                     )}
                   >
                     <div className="flex items-center gap-2 mb-1 px-1">
