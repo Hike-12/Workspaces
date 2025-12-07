@@ -638,7 +638,7 @@ const Chat = () => {
                       </div>
                     </div>
                     {remoteUserIds.filter(id => id !== userId).map((remoteUserId) => (
-                      <div key={remoteUserId} className="relative aspect-video bg-black rounded-2xl overflow-hidden border border-border-subtle">
+                      <div key={remoteUserId} className="relative aspect-video rounded-2xl overflow-hidden border border-border-subtle">
                         <video
                           ref={el => remoteVideoRefs.current[remoteUserId] = el}
                           autoPlay
