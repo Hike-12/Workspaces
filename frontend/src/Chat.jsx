@@ -59,6 +59,7 @@ const Chat = () => {
   const peerConnections = useRef({});
   const remoteVideoRefs = useRef({});
   const isVideoCallActiveRef = useRef(false);
+  const pendingCandidates = useRef({}); // Queue ICE candidates that arrive before remote description
 
   // Redirect if no user data
   useEffect(() => {
@@ -232,28 +233,30 @@ const Chat = () => {
     }
   };
 
-  const endVideoCall = () => {
-    Object.values(peerConnections.current).forEach(connection => connection.close());
-    peerConnections.current = {};
-    
-    if (localStreamRef.current) {
-      localStreamRef.current.getTracks().forEach(track => track.stop());
-      localStreamRef.current = null;
-    }
+const endVideoCall = () => {
+  Object.values(peerConnections.current).forEach(connection => connection.close());
+  peerConnections.current = {};
+  pendingCandidates.current = {}; // Clear pending candidates
+  
+  if (localStreamRef.current) {
+    localStreamRef.current.getTracks().forEach(track => track.stop());
+    localStreamRef.current = null;
+  }
 
-    if (localVideoRef.current) {
-      localVideoRef.current.srcObject = null;
-    }
+  if (localVideoRef.current) {
+    localVideoRef.current.srcObject = null;
+  }
 
-    Object.values(remoteVideoRefs.current).forEach(video => {
-      if (video) video.srcObject = null;
-    });
+  Object.values(remoteVideoRefs.current).forEach(video => {
+    if (video) video.srcObject = null;
+  });
 
-    setIsVideoCallActive(false);
-    isVideoCallActiveRef.current = false;
-    socketRef.current.emit("leaveCall", { roomId, userId, userName });
-    toast.info("Video call ended");
-  };
+  setIsVideoCallActive(false);
+  isVideoCallActiveRef.current = false;
+  pendingCandidates.current = {}; // Clear pending candidates
+  socketRef.current.emit("leaveCall", { roomId, userId, userName });
+  toast.info("Video call ended");
+};
 
   // CRITICAL: This is the peer connection factory from your old working code
   const createPeerConnection = (remoteUserId) => {
@@ -278,16 +281,27 @@ const Chat = () => {
     // send our ICE
     pc.onicecandidate = e => {
       if (e.candidate) {
+        console.log("Sending ICE candidate to", remoteUserId);
         socketRef.current.emit("ice-candidate", { candidate: e.candidate, to: remoteUserId });
       }
     };
 
     // attach remote stream
     pc.ontrack = e => {
+      console.log("Received track from", remoteUserId);
       const el = remoteVideoRefs.current[remoteUserId];
       if (el) {
         el.srcObject = e.streams[0];
       }
+    };
+
+    // Connection state monitoring
+    pc.onconnectionstatechange = () => {
+      console.log(`Connection state with ${remoteUserId}:`, pc.connectionState);
+    };
+
+    pc.oniceconnectionstatechange = () => {
+      console.log(`ICE connection state with ${remoteUserId}:`, pc.iceConnectionState);
     };
 
     return pc;
@@ -302,47 +316,98 @@ const Chat = () => {
   };
 
   const handleOffer = async ({ offer, from }) => {
-    if (!localStreamRef.current) return;
-    const pc = createPeerConnection(from);
-
-    if (pc.remoteDescription) {
+    if (!isVideoCallActiveRef.current || !localStreamRef.current) {
+      console.log("Ignoring offer from", from, "- call not active");
       return;
     }
+    
+    const pc = createPeerConnection(from);
 
-    try {
+    // Handle signaling state conflicts
+    if (pc.signalingState !== "stable") {
+      console.log("Signaling state not stable, rolling back...");
+      await Promise.all([
+        pc.setLocalDescription({type: "rollback"}),
+        pc.setRemoteDescription(new RTCSessionDescription(offer))
+      ]);
+    } else {
       await pc.setRemoteDescription(new RTCSessionDescription(offer));
-      const answer = await pc.createAnswer();
-      await pc.setLocalDescription(answer);
-      socketRef.current.emit("answer", { answer, to: from });
-    } catch (err) {
-      console.error("error handling offer:", err);
-      pc.close();
-      delete peerConnections.current[from];
+    }
+    
+    const answer = await pc.createAnswer();
+    await pc.setLocalDescription(answer);
+    socketRef.current.emit("answer", { answer, to: from });
+    console.log("✅ Sent answer to", from);
+    
+    // Process pending ICE candidates
+    if (pendingCandidates.current[from]?.length > 0) {
+      console.log(`Processing ${pendingCandidates.current[from].length} pending candidates for`, from);
+      for (const candidate of pendingCandidates.current[from]) {
+        try {
+          await pc.addIceCandidate(new RTCIceCandidate(candidate));
+        } catch (e) {
+          console.warn("Failed to add pending candidate:", e);
+        }
+      }
+      pendingCandidates.current[from] = [];
     }
   };
 
   const handleAnswer = async ({ answer, from }) => {
     const pc = peerConnections.current[from];
     if (!pc) {
+      console.log("⏩ No peer connection for answer from", from);
       return;
     }
-    if (pc.remoteDescription) {
+    
+    if (pc.signalingState !== "have-local-offer") {
+      console.log("⏩ Wrong signaling state for answer:", pc.signalingState);
       return;
     }
+    
     try {
       await pc.setRemoteDescription(new RTCSessionDescription(answer));
+      console.log("✅ Set remote answer from", from);
+      
+      // Process pending ICE candidates
+      if (pendingCandidates.current[from]?.length > 0) {
+        console.log(`Processing ${pendingCandidates.current[from].length} pending candidates for`, from);
+        for (const candidate of pendingCandidates.current[from]) {
+          try {
+            await pc.addIceCandidate(new RTCIceCandidate(candidate));
+          } catch (e) {
+            console.warn("Failed to add pending candidate:", e);
+          }
+        }
+        pendingCandidates.current[from] = [];
+      }
     } catch (err) {
-      console.error("failed to set remote answer:", err);
+      console.error("❌ Failed to set remote answer:", err);
     }
   };
 
   const handleICECandidate = async ({ candidate, from }) => {
     const pc = peerConnections.current[from];
-    if (!pc) return;
+    if (!pc) {
+      console.warn("⚠️ No peer connection for ICE candidate from", from);
+      return;
+    }
+    
+    // Queue candidates if remote description not set yet
+    if (!pc.remoteDescription || !pc.remoteDescription.type) {
+      if (!pendingCandidates.current[from]) {
+        pendingCandidates.current[from] = [];
+      }
+      pendingCandidates.current[from].push(candidate);
+      console.log("📦 Queued ICE candidate from", from, "(total:", pendingCandidates.current[from].length, ")");
+      return;
+    }
+    
     try {
       await pc.addIceCandidate(new RTCIceCandidate(candidate));
+      console.log("✅ Added ICE candidate from", from);
     } catch (e) {
-      // ignore
+      console.warn("❌ ICE add failed:", e);
     }
   };
 
