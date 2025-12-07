@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { API_ENDPOINTS, cn } from "./lib/utils";
-import { Users, Video, MessageCircle, Upload, Moon, Sun, ArrowRight, LayoutGrid, ShieldCheck, HelpCircle, X } from "lucide-react";
+import { Users, Video, MessageCircle, Upload, Moon, Sun, ArrowRight, LayoutGrid, ShieldCheck, HelpCircle, X, LogOut } from "lucide-react";
 import { ToastContainer, toast } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
 import { v4 as uuidv4 } from "uuid";
@@ -12,8 +12,13 @@ const Home = () => {
   const navigate = useNavigate();
   const { theme, toggleTheme } = useTheme();
 
+  // Auth State
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const [authMode, setAuthMode] = useState("login"); // 'login' or 'register'
+  const [authData, setAuthData] = useState({ username: "", password: "" });
+
+  // Room State
   const [formData, setFormData] = useState({
-    userName: "",
     roomName: "",
     password: "",
     description: "",
@@ -23,10 +28,19 @@ const Home = () => {
   const [showHelp, setShowHelp] = useState(false);
 
   useEffect(() => {
-    if (!localStorage.getItem("userId")) {
-      localStorage.setItem("userId", uuidv4());
+    const token = localStorage.getItem("token");
+    const storedUserName = localStorage.getItem("userName");
+    if (token && storedUserName) {
+      setIsLoggedIn(true);
+      if (!localStorage.getItem("userId")) {
+        localStorage.setItem("userId", uuidv4());
+      }
     }
   }, []);
+
+  const handleAuthChange = (e) => {
+    setAuthData({ ...authData, [e.target.name]: e.target.value });
+  };
 
   const handleInputChange = (e) => {
     setFormData({
@@ -35,23 +49,67 @@ const Home = () => {
     });
   };
 
+  const handleAuth = async (e) => {
+    e.preventDefault();
+    if (!authData.username || !authData.password) {
+      toast.error("Please fill in all fields");
+      return;
+    }
+    setLoading(true);
+    try {
+      const endpoint = authMode === "login" ? API_ENDPOINTS.LOGIN : API_ENDPOINTS.REGISTER;
+      const response = await fetch(endpoint, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(authData),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.message);
+
+      localStorage.setItem("token", data.token);
+      localStorage.setItem("userName", data.user.username);
+      localStorage.setItem("userId", data.user.id || uuidv4()); 
+      
+      setIsLoggedIn(true);
+      toast.success(authMode === "login" ? "Welcome back!" : "Account created!");
+    } catch (error) {
+      toast.error(error.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleLogout = () => {
+    localStorage.removeItem("token");
+    localStorage.removeItem("userName");
+    localStorage.removeItem("userId");
+    localStorage.removeItem("roomId");
+    localStorage.removeItem("roomName");
+    setIsLoggedIn(false);
+    setAuthData({ username: "", password: "" });
+    toast.info("Logged out successfully");
+  };
+
   const createRoom = async (e) => {
     e.preventDefault();
-    if (!formData.userName || !formData.roomName || !formData.password) {
+    if (!formData.roomName || !formData.password) {
       toast.error("Please fill in all required fields");
       return;
     }
     setLoading(true);
     try {
       const userId = localStorage.getItem("userId");
+      const userName = localStorage.getItem("userName");
       const response = await fetch(API_ENDPOINTS.CREATE_ROOM, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...formData, userId }),
+        headers: { 
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${localStorage.getItem("token")}`
+        },
+        body: JSON.stringify({ ...formData, userName, userId }),
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.message);
-      localStorage.setItem("userName", formData.userName);
       localStorage.setItem("roomId", data.room.id);
       localStorage.setItem("roomName", data.room.name);
       toast.success("Room created successfully!");
@@ -65,21 +123,24 @@ const Home = () => {
 
   const joinRoom = async (e) => {
     e.preventDefault();
-    if (!formData.userName || !formData.roomName || !formData.password) {
+    if (!formData.roomName || !formData.password) {
       toast.error("Please fill in all required fields");
       return;
     }
     setLoading(true);
     try {
       const userId = localStorage.getItem("userId");
+      const userName = localStorage.getItem("userName");
       const response = await fetch(API_ENDPOINTS.JOIN_ROOM, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...formData, userId }),
+        headers: { 
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${localStorage.getItem("token")}`
+        },
+        body: JSON.stringify({ ...formData, userName, userId }),
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.message);
-      localStorage.setItem("userName", formData.userName);
       localStorage.setItem("roomId", data.room.id);
       localStorage.setItem("roomName", data.room.name);
       toast.success("Joined room successfully!");
@@ -120,6 +181,15 @@ const Home = () => {
           <span className="font-serif text-xl font-bold tracking-tight">Workspaces</span>
         </div>
         <div className="flex items-center gap-2">
+          {isLoggedIn && (
+            <button
+              onClick={handleLogout}
+              className="p-2 rounded-full hover:bg-bg-surface border border-transparent hover:border-border-subtle transition-all duration-200 text-fg-secondary hover:text-red-500"
+              title="Logout"
+            >
+              <LogOut size={20} />
+            </button>
+          )}
           <button
             onClick={() => setShowHelp(true)}
             className="p-2 rounded-full hover:bg-bg-surface border border-transparent hover:border-border-subtle transition-all duration-200"
@@ -219,7 +289,7 @@ const Home = () => {
           </motion.div>
         </motion.div>
 
-        {/* Right Column: Auth Form */}
+        {/* Right Column: Auth Form or Room Form */}
         <motion.div 
           className="lg:col-span-5 w-full"
           initial={{ opacity: 0, x: 20 }}
@@ -228,111 +298,181 @@ const Home = () => {
         >
           <div className="bg-bg-surface border border-border-subtle rounded-[2rem] p-8 shadow-xl shadow-black/5">
             
-            {/* Tabs */}
-            <div className="flex p-1 bg-bg-canvas rounded-xl mb-8">
-              <button
-                onClick={() => setIsCreating(false)}
-                className={cn(
-                  "flex-1 py-2.5 text-sm font-medium rounded-lg transition-all duration-200",
-                  !isCreating ? "bg-bg-surface text-fg-primary shadow-sm" : "text-fg-secondary hover:text-fg-primary"
-                )}
-              >
-                Join Room
-              </button>
-              <button
-                onClick={() => setIsCreating(true)}
-                className={cn(
-                  "flex-1 py-2.5 text-sm font-medium rounded-lg transition-all duration-200",
-                  isCreating ? "bg-bg-surface text-fg-primary shadow-sm" : "text-fg-secondary hover:text-fg-primary"
-                )}
-              >
-                Create Room
-              </button>
-            </div>
-
-            <form onSubmit={isCreating ? createRoom : joinRoom} className="flex flex-col gap-5">
-              <div className="space-y-1.5">
-                <label className="text-sm font-medium text-fg-secondary ml-1">Display Name</label>
-                <input
-                  type="text"
-                  name="userName"
-                  value={formData.userName}
-                  onChange={handleInputChange}
-                  className="w-full px-4 py-3 rounded-xl bg-bg-canvas border border-border-subtle focus:border-accent-brand focus:ring-2 focus:ring-accent-brand/20 outline-none transition-all duration-200"
-                  placeholder="John Doe"
-                  required
-                />
-              </div>
-
-              <div className="space-y-1.5">
-                <label className="text-sm font-medium text-fg-secondary ml-1">Room Name</label>
-                <input
-                  type="text"
-                  name="roomName"
-                  value={formData.roomName}
-                  onChange={handleInputChange}
-                  className="w-full px-4 py-3 rounded-xl bg-bg-canvas border border-border-subtle focus:border-accent-brand focus:ring-2 focus:ring-accent-brand/20 outline-none transition-all duration-200"
-                  placeholder="Project Alpha"
-                  required
-                />
-              </div>
-
-              <div className="space-y-1.5">
-                <label className="text-sm font-medium text-fg-secondary ml-1">Password</label>
-                <div className="relative">
-                  <input
-                    type="password"
-                    name="password"
-                    value={formData.password}
-                    onChange={handleInputChange}
-                    className="w-full px-4 py-3 rounded-xl bg-bg-canvas border border-border-subtle focus:border-accent-brand focus:ring-2 focus:ring-accent-brand/20 outline-none transition-all duration-200"
-                    placeholder="••••••••"
-                    required
-                  />
-                  <ShieldCheck className="absolute right-4 top-1/2 -translate-y-1/2 text-fg-secondary/50" size={18} />
-                </div>
-              </div>
-
-              <AnimatePresence>
-                {isCreating && (
-                  <motion.div
-                    initial={{ height: 0, opacity: 0 }}
-                    animate={{ height: "auto", opacity: 1 }}
-                    exit={{ height: 0, opacity: 0 }}
-                    className="overflow-hidden"
+            {!isLoggedIn ? (
+              // AUTH FORM
+              <>
+                <div className="flex p-1 bg-bg-canvas rounded-xl mb-8">
+                  <button
+                    onClick={() => setAuthMode("login")}
+                    className={cn(
+                      "flex-1 py-2.5 text-sm font-medium rounded-lg transition-all duration-200",
+                      authMode === "login" ? "bg-bg-surface text-fg-primary shadow-sm" : "text-fg-secondary hover:text-fg-primary"
+                    )}
                   >
-                    <div className="space-y-1.5 pt-1">
-                      <label className="text-sm font-medium text-fg-secondary ml-1">Description</label>
-                      <textarea
-                        name="description"
-                        value={formData.description}
-                        onChange={handleInputChange}
-                        className="w-full px-4 py-3 rounded-xl bg-bg-canvas border border-border-subtle focus:border-accent-brand focus:ring-2 focus:ring-accent-brand/20 outline-none transition-all duration-200 resize-none"
-                        placeholder="What's this room about?"
-                        rows="3"
-                      />
-                    </div>
-                  </motion.div>
-                )}
-              </AnimatePresence>
+                    Login
+                  </button>
+                  <button
+                    onClick={() => setAuthMode("register")}
+                    className={cn(
+                      "flex-1 py-2.5 text-sm font-medium rounded-lg transition-all duration-200",
+                      authMode === "register" ? "bg-bg-surface text-fg-primary shadow-sm" : "text-fg-secondary hover:text-fg-primary"
+                    )}
+                  >
+                    Register
+                  </button>
+                </div>
 
-              <motion.button
-                whileHover={{ scale: 1.02 }}
-                whileTap={{ scale: 0.98 }}
-                type="submit"
-                disabled={loading}
-                className="mt-2 w-full py-3.5 rounded-xl bg-accent-brand text-white font-medium shadow-lg shadow-accent-brand/25 hover:shadow-xl hover:shadow-accent-brand/30 transition-all duration-200 flex items-center justify-center gap-2 disabled:opacity-70 disabled:cursor-not-allowed"
-              >
-                {loading ? (
-                  "Processing..."
-                ) : (
-                  <>
-                    {isCreating ? "Create Workspace" : "Join Workspace"}
-                    <ArrowRight size={18} />
-                  </>
-                )}
-              </motion.button>
-            </form>
+                <form onSubmit={handleAuth} className="flex flex-col gap-5">
+                  <div className="space-y-1.5">
+                    <label className="text-sm font-medium text-fg-secondary ml-1">Username</label>
+                    <input
+                      type="text"
+                      name="username"
+                      value={authData.username}
+                      onChange={handleAuthChange}
+                      className="w-full px-4 py-3 rounded-xl bg-bg-canvas border border-border-subtle focus:border-accent-brand focus:ring-2 focus:ring-accent-brand/20 outline-none transition-all duration-200"
+                      placeholder="johndoe"
+                      required
+                    />
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <label className="text-sm font-medium text-fg-secondary ml-1">Password</label>
+                    <div className="relative">
+                      <input
+                        type="password"
+                        name="password"
+                        value={authData.password}
+                        onChange={handleAuthChange}
+                        className="w-full px-4 py-3 rounded-xl bg-bg-canvas border border-border-subtle focus:border-accent-brand focus:ring-2 focus:ring-accent-brand/20 outline-none transition-all duration-200"
+                        placeholder="••••••••"
+                        required
+                      />
+                      <ShieldCheck className="absolute right-4 top-1/2 -translate-y-1/2 text-fg-secondary/50" size={18} />
+                    </div>
+                  </div>
+
+                  <motion.button
+                    whileHover={{ scale: 1.02 }}
+                    whileTap={{ scale: 0.98 }}
+                    type="submit"
+                    disabled={loading}
+                    className="mt-2 w-full py-3.5 rounded-xl bg-accent-brand text-white font-medium shadow-lg shadow-accent-brand/25 hover:shadow-xl hover:shadow-accent-brand/30 transition-all duration-200 flex items-center justify-center gap-2 disabled:opacity-70 disabled:cursor-not-allowed"
+                  >
+                    {loading ? (
+                      "Processing..."
+                    ) : (
+                      <>
+                        {authMode === "login" ? "Login" : "Create Account"}
+                        <ArrowRight size={18} />
+                      </>
+                    )}
+                  </motion.button>
+                </form>
+              </>
+            ) : (
+              // ROOM FORM
+              <>
+                <div className="flex p-1 bg-bg-canvas rounded-xl mb-8">
+                  <button
+                    onClick={() => setIsCreating(false)}
+                    className={cn(
+                      "flex-1 py-2.5 text-sm font-medium rounded-lg transition-all duration-200",
+                      !isCreating ? "bg-bg-surface text-fg-primary shadow-sm" : "text-fg-secondary hover:text-fg-primary"
+                    )}
+                  >
+                    Join Room
+                  </button>
+                  <button
+                    onClick={() => setIsCreating(true)}
+                    className={cn(
+                      "flex-1 py-2.5 text-sm font-medium rounded-lg transition-all duration-200",
+                      isCreating ? "bg-bg-surface text-fg-primary shadow-sm" : "text-fg-secondary hover:text-fg-primary"
+                    )}
+                  >
+                    Create Room
+                  </button>
+                </div>
+
+                <form onSubmit={isCreating ? createRoom : joinRoom} className="flex flex-col gap-5">
+                  <div className="space-y-1.5">
+                    <label className="text-sm font-medium text-fg-secondary ml-1">Logged in as</label>
+                    <div className="w-full px-4 py-3 rounded-xl bg-bg-canvas/50 border border-border-subtle text-fg-secondary cursor-not-allowed">
+                      {localStorage.getItem("userName")}
+                    </div>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <label className="text-sm font-medium text-fg-secondary ml-1">Room Name</label>
+                    <input
+                      type="text"
+                      name="roomName"
+                      value={formData.roomName}
+                      onChange={handleInputChange}
+                      className="w-full px-4 py-3 rounded-xl bg-bg-canvas border border-border-subtle focus:border-accent-brand focus:ring-2 focus:ring-accent-brand/20 outline-none transition-all duration-200"
+                      placeholder="Project Alpha"
+                      required
+                    />
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <label className="text-sm font-medium text-fg-secondary ml-1">Password</label>
+                    <div className="relative">
+                      <input
+                        type="password"
+                        name="password"
+                        value={formData.password}
+                        onChange={handleInputChange}
+                        className="w-full px-4 py-3 rounded-xl bg-bg-canvas border border-border-subtle focus:border-accent-brand focus:ring-2 focus:ring-accent-brand/20 outline-none transition-all duration-200"
+                        placeholder="••••••••"
+                        required
+                      />
+                      <ShieldCheck className="absolute right-4 top-1/2 -translate-y-1/2 text-fg-secondary/50" size={18} />
+                    </div>
+                  </div>
+
+                  <AnimatePresence>
+                    {isCreating && (
+                      <motion.div
+                        initial={{ height: 0, opacity: 0 }}
+                        animate={{ height: "auto", opacity: 1 }}
+                        exit={{ height: 0, opacity: 0 }}
+                        className="overflow-hidden"
+                      >
+                        <div className="space-y-1.5 pt-1">
+                          <label className="text-sm font-medium text-fg-secondary ml-1">Description</label>
+                          <textarea
+                            name="description"
+                            value={formData.description}
+                            onChange={handleInputChange}
+                            className="w-full px-4 py-3 rounded-xl bg-bg-canvas border border-border-subtle focus:border-accent-brand focus:ring-2 focus:ring-accent-brand/20 outline-none transition-all duration-200 resize-none"
+                            placeholder="What's this room about?"
+                            rows="3"
+                          />
+                        </div>
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+
+                  <motion.button
+                    whileHover={{ scale: 1.02 }}
+                    whileTap={{ scale: 0.98 }}
+                    type="submit"
+                    disabled={loading}
+                    className="mt-2 w-full py-3.5 rounded-xl bg-accent-brand text-white font-medium shadow-lg shadow-accent-brand/25 hover:shadow-xl hover:shadow-accent-brand/30 transition-all duration-200 flex items-center justify-center gap-2 disabled:opacity-70 disabled:cursor-not-allowed"
+                  >
+                    {loading ? (
+                      "Processing..."
+                    ) : (
+                      <>
+                        {isCreating ? "Create Workspace" : "Join Workspace"}
+                        <ArrowRight size={18} />
+                      </>
+                    )}
+                  </motion.button>
+                </form>
+              </>
+            )}
           </div>
         </motion.div>
       </main>

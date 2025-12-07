@@ -11,6 +11,8 @@ export const NODE_BASE_URL = import.meta.env.VITE_NODE_BASE_URL || "http://local
 export const SOCKET_URL = import.meta.env.VITE_SOCKET_URL || "http://localhost:5000";
 
 export const API_ENDPOINTS = {
+  LOGIN: `${NODE_BASE_URL}/api/auth/login`,
+  REGISTER: `${NODE_BASE_URL}/api/auth/register`,
   CREATE_ROOM: `${NODE_BASE_URL}/api/rooms/create`,
   JOIN_ROOM: `${NODE_BASE_URL}/api/rooms/join`,
   LEAVE_ROOM: `${NODE_BASE_URL}/api/rooms/leave`,

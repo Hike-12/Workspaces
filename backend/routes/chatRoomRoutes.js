@@ -1,9 +1,10 @@
 const express = require('express');
 const Room = require('../models/ChatRoom');
+const auth = require('../middleware/auth');
 const router = express.Router();
 
 // Create room
-router.post('/create', async (req, res) => {
+router.post('/create', auth, async (req, res) => {
   try {
     const { roomName, password, description, userName, userId } = req.body;
 
@@ -37,7 +38,7 @@ router.post('/create', async (req, res) => {
 });
 
 // Join room
-router.post('/join', async (req, res) => {
+router.post('/join', auth, async (req, res) => {
   try {
     const { roomName, password, userName, userId } = req.body;
 
@@ -71,7 +72,7 @@ router.post('/join', async (req, res) => {
 });
 
 // Get room details
-router.get('/:roomId', async (req, res) => {
+router.get('/:roomId', auth, async (req, res) => {
   try {
     const room = await Room.findById(req.params.roomId);
 
@@ -92,7 +93,7 @@ router.get('/:roomId', async (req, res) => {
   }
 });
 
-router.post('/leave', async (req, res) => {
+router.post('/leave', auth, async (req, res) => {
   try {
     const { roomId, userId } = req.body;
 

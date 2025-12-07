@@ -9,6 +9,7 @@ const connectDB = require('./config/db');
 const roomRoutes = require('./routes/chatRoomRoutes');
 const fileRoutes = require('./routes/fileRoutes');
 const messageRoutes = require('./routes/messageRoutes');
+const authRoutes = require('./routes/authRoutes');
 
 const app = express();
 const server = http.createServer(app);
@@ -46,6 +47,7 @@ app.use(express.urlencoded({ extended: true }));
 connectDB();
 
 // Routes
+app.use('/api/auth', authRoutes);
 app.use('/api/rooms', roomRoutes);
 app.use('/api/files', fileRoutes);
 app.use('/api/messages', messageRoutes);

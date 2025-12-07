@@ -1,9 +1,10 @@
 const express = require('express');
 const Message = require('../models/Message');
+const auth = require('../middleware/auth');
 const router = express.Router();
 
 // Get messages for a room
-router.get('/messages', async (req, res) => {
+router.get('/messages', auth, async (req, res) => {
   try {
     const { room_id } = req.query;
     
@@ -17,7 +18,7 @@ router.get('/messages', async (req, res) => {
 });
 
 // Save message
-router.post('/messages', async (req, res) => {
+router.post('/messages', auth, async (req, res) => {
   try {
     const { room_id, sender, content, userName, userId } = req.body;
 

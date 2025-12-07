@@ -64,7 +64,8 @@ const Chat = () => {
   const iceCandidateQueue = useRef({});
 
   useEffect(() => {
-    if (!userName || !roomId || !userId) {
+    const token = localStorage.getItem("token");
+    if (!userName || !roomId || !userId || !token) {
       navigate('/');
       return;
     }
@@ -72,17 +73,18 @@ const Chat = () => {
 
   const leaveRoom = async () => {
     try {
-      await fetch(`${API_ENDPOINTS.NODE_BASE_URL}/api/rooms/leave`, {
+      await fetch(API_ENDPOINTS.LEAVE_ROOM, {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json'
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem("token")}`
         },
         body: JSON.stringify({ roomId, userId })
       });
     } catch (error) {
       console.error('Error leaving room:', error);
     }
-    localStorage.removeItem("userName");
+    // Keep auth data (token, userId, userName)
     localStorage.removeItem("roomId");
     localStorage.removeItem("roomName");
     navigate('/');
@@ -183,11 +185,15 @@ const Chat = () => {
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const messagesResponse = await fetch(`${API_ENDPOINTS.GET_MESSAGES}?room_id=${roomId}`);
+        const messagesResponse = await fetch(`${API_ENDPOINTS.GET_MESSAGES}?room_id=${roomId}`, {
+          headers: { "Authorization": `Bearer ${localStorage.getItem("token")}` }
+        });
         const messagesData = await messagesResponse.json();
         setMessages(messagesData);
 
-        const roomResponse = await fetch(API_ENDPOINTS.GET_ROOM(roomId));
+        const roomResponse = await fetch(API_ENDPOINTS.GET_ROOM(roomId), {
+          headers: { "Authorization": `Bearer ${localStorage.getItem("token")}` }
+        });
         const roomData = await roomResponse.json();
         setRoomData(roomData.room);
       } catch (error) {
@@ -566,8 +572,11 @@ const Chat = () => {
     try {
       await fetch(API_ENDPOINTS.SEND_MESSAGE, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(newMessage),
+        headers: { 
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${localStorage.getItem("token")}`
+        },
+        body: JSON.stringify(messageData),
       });
       setMessage("");
     } catch (error) {
