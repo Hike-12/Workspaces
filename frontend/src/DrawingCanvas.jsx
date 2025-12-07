@@ -369,7 +369,7 @@ const DrawingCanvas = () => {
               { id: "rect", icon: Square, label: "Rectangle" },
               { id: "circle", icon: Circle, label: "Circle" },
               { id: "line", icon: Minus, label: "Line" },
-              { id: "text", icon: Type, label: "Text" },
+              // { id: "text", icon: Type, label: "Text" },
             ].map((t) => (
               <button
                 key={t.id}
