@@ -105,58 +105,52 @@ router.post('/leave', auth, async (req, res) => {
     // Remove user from participants
     room.participants = room.participants.filter(p => p.userId !== userId);
     
-    if (room.participants.length === 0) {
-      // If no participants left, trigger cleanup
-      await cleanupEmptyRoom(roomId);
-      return res.json({ message: 'Room deleted - no participants remaining' });
-    } else {
-      // Save updated room
-      await room.save();
-      return res.json({ 
-        message: 'Left room successfully',
-        participants: room.participants.length 
-      });
-    }
+    // Save updated room
+    await room.save();
+    return res.json({ 
+      message: 'Left room successfully',
+      participants: room.participants.length 
+    });
   } catch (error) {
     res.status(500).json({ message: 'Server error', error: error.message });
   }
 });
 
 // Add the cleanup function to this file as well
-const cleanupEmptyRoom = async (roomId) => {
-  try {
-    const Message = require('../models/Message');
-    const File = require('../models/File');
-    const fs = require('fs');
+// const cleanupEmptyRoom = async (roomId) => {
+//   try {
+//     const Message = require('../models/Message');
+//     const File = require('../models/File');
+//     const fs = require('fs');
     
-    console.log(`Starting cleanup for room ${roomId}`);
+//     console.log(`Starting cleanup for room ${roomId}`);
     
-    // Delete all files associated with the room
-    const files = await File.find({ room_id: roomId });
-    for (const file of files) {
-      // Delete file from filesystem
-      if (fs.existsSync(file.path)) {
-        fs.unlinkSync(file.path);
-        console.log(`Deleted file: ${file.path}`);
-      }
-    }
+//     // Delete all files associated with the room
+//     const files = await File.find({ room_id: roomId });
+//     for (const file of files) {
+//       // Delete file from filesystem
+//       if (fs.existsSync(file.path)) {
+//         fs.unlinkSync(file.path);
+//         console.log(`Deleted file: ${file.path}`);
+//       }
+//     }
     
-    // Delete file records from database
-    await File.deleteMany({ room_id: roomId });
-    console.log(`Deleted ${files.length} file records for room ${roomId}`);
+//     // Delete file records from database
+//     await File.deleteMany({ room_id: roomId });
+//     console.log(`Deleted ${files.length} file records for room ${roomId}`);
     
-    // Delete all messages for the room
-    const messageCount = await Message.countDocuments({ room_id: roomId });
-    await Message.deleteMany({ room_id: roomId });
-    console.log(`Deleted ${messageCount} messages for room ${roomId}`);
+//     // Delete all messages for the room
+//     const messageCount = await Message.countDocuments({ room_id: roomId });
+//     await Message.deleteMany({ room_id: roomId });
+//     console.log(`Deleted ${messageCount} messages for room ${roomId}`);
     
-    // Delete the room itself
-    await Room.findByIdAndDelete(roomId);
-    console.log(`Deleted room ${roomId} from database`);
+//     // Delete the room itself
+//     await Room.findByIdAndDelete(roomId);
+//     console.log(`Deleted room ${roomId} from database`);
     
-  } catch (error) {
-    console.error(`Error cleaning up room ${roomId}:`, error);
-  }
-};
+//   } catch (error) {
+//     console.error(`Error cleaning up room ${roomId}:`, error);
+//   }
+// };
 
 module.exports = router;
