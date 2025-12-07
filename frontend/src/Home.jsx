@@ -223,6 +223,11 @@ const Home = () => {
             <div className="text-base leading-relaxed space-y-3">
               <div>
                 For testing purposes, you can use the following credentials:<br />
+                <strong>Username:</strong> <b>Aliqyaan</b><br />
+                <strong>Password:</strong> <b>123456</b>
+              </div>
+              <div>
+                To join the demo room, use the following details:<br />
                 <strong>Join room:</strong> Room name is <b>Test</b>, Password is <b>123</b>.
               </div>
               <div>
