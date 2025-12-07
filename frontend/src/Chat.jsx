@@ -576,7 +576,7 @@ const Chat = () => {
           "Content-Type": "application/json",
           "Authorization": `Bearer ${localStorage.getItem("token")}`
         },
-        body: JSON.stringify(messageData),
+        body: JSON.stringify(newMessage),
       });
       setMessage("");
     } catch (error) {
