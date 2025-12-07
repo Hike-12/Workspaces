@@ -111,24 +111,23 @@ const Chat = () => {
       toast.error(data.message);
     });
 
-    // --- Video Call Events ---
+    // WebRTC event listeners - moved here to avoid dependency issues
     socketRef.current.on("userJoined", ({ userId: remoteUserId, userName: remoteUserName }) => {
-      console.log("User joined event received:", remoteUserId, remoteUserName);
+      // console.log("User joined:", remoteUserId, "Current video call active:", isVideoCallActiveRef.current);
       setRemoteUserIds(prev => prev.includes(remoteUserId) ? prev : [...prev, remoteUserId]);
       setRemoteUsers(prev => ({ ...prev, [remoteUserId]: remoteUserName }));
-
+      
+      // Only create peer connection if video call is active at the time
       setTimeout(() => {
         if (isVideoCallActiveRef.current && localStreamRef.current) {
-          console.log("Attempting to handle user joined for:", remoteUserId);
           handleUserJoined(remoteUserId);
         }
       }, 100);
-
+      
       toast.info(`${remoteUserName || remoteUserId} joined the call or room`);
     });
 
     socketRef.current.on("userLeft", ({ userId: remoteUserId, userName: remoteUserName }) => {
-      console.log("User left event received:", remoteUserId, remoteUserName);
       setRemoteUserIds(prev => prev.filter(id => id !== remoteUserId));
       setRemoteUsers(prev => {
         const updated = { ...prev };
@@ -142,8 +141,9 @@ const Chat = () => {
       toast.info(`${remoteUserName || remoteUserId} left the call or room`);
     });
 
-    socketRef.current.on("existingParticipants", ({ participants }) => {
-      console.log("Existing participants received:", participants);
+    socketRef.current.on("existingParticipants", async ({ participants }) => {
+      // console.log("Existing participants:", participants);
+
       const newUserIds = participants
         .map(p => p.userId)
         .filter(id => id !== userId);
@@ -161,21 +161,10 @@ const Chat = () => {
         return updated;
       });
     });
-
-    socketRef.current.on("offer", (data) => {
-      console.log("Offer received from:", data.from);
-      handleOffer(data);
-    });
     
-    socketRef.current.on("answer", (data) => {
-      console.log("Answer received from:", data.from);
-      handleAnswer(data);
-    });
-    
-    socketRef.current.on("ice-candidate", (data) => {
-      console.log("ICE candidate received from:", data.from);
-      handleICECandidate(data);
-    });
+    socketRef.current.on("offer", handleOffer);
+    socketRef.current.on("answer", handleAnswer);
+    socketRef.current.on("ice-candidate", handleICECandidate);
 
     return () => {
       socketRef.current.disconnect();
@@ -213,25 +202,36 @@ const Chat = () => {
 
   const startVideoCall = async () => {
     try {
-      console.log("Starting video call...");
+      // console.log("Starting video call with existing users:", remoteUserIds);
+
       if (!localStreamRef.current) {
-        console.log("Getting user media...");
         localStreamRef.current = await navigator.mediaDevices.getUserMedia({
           video: true,
           audio: true,
         });
-        console.log("Got user media successfully");
       }
 
       setIsVideoCallActive(true);
       isVideoCallActiveRef.current = true;
 
-      console.log("Emitting joinCall event to server");
       socketRef.current.emit("joinCall", { roomId, userId, userName });
 
-      // Don't create offers immediately - wait for existing participants to send offers
-      // or for the userJoined event to trigger for new participants
-      console.log("Waiting for signaling from existing participants...");
+      // Always create offers to all known remote users (from existingParticipants)
+      setTimeout(() => {
+        const validRemoteUsers = remoteUserIds.filter(id => id !== userId);
+        // console.log("Creating connections for existing users:", validRemoteUsers);
+
+        validRemoteUsers.forEach(async (remoteUserId) => {
+          const pc = createPeerConnection(remoteUserId);
+          try {
+            const offer = await pc.createOffer();
+            await pc.setLocalDescription(offer);
+            socketRef.current.emit("offer", { offer, to: remoteUserId });
+          } catch (err) {
+            console.error("Error creating offer for", remoteUserId, err);
+          }
+        });
+      }, 500);
 
       toast.success("Video call started successfully!");
     } catch (error) {
@@ -243,7 +243,7 @@ const Chat = () => {
   const endVideoCall = () => {
     Object.values(peerConnections.current).forEach(connection => connection.close());
     peerConnections.current = {};
-
+    
     if (localStreamRef.current) {
       localStreamRef.current.getTracks().forEach(track => track.stop());
       localStreamRef.current = null;
@@ -258,210 +258,111 @@ const Chat = () => {
     });
 
     setIsVideoCallActive(false);
-    isVideoCallActiveRef.current = false;
+    isVideoCallActiveRef.current = false; // Set ref immediately
     socketRef.current.emit("leaveCall", { roomId, userId, userName });
     toast.info("Video call ended");
   };
 
+  // 1) single factory:
   const createPeerConnection = (remoteUserId) => {
     if (peerConnections.current[remoteUserId]) {
       return peerConnections.current[remoteUserId];
     }
-    // Hardcoded free STUN + TURN (best-effort). TURN over TLS 443 preferred.
-    const pc = new window.RTCPeerConnection({
+    const pc = new RTCPeerConnection({
       iceServers: [
         { urls: "stun:stun.l.google.com:19302" },
-        { urls: "turn:a.relay.metered.ca:443", username: "openrelayproject", credential: "openrelayproject" },
+        { urls: "turn:relay1.expressturn.com:3478", username: "efrelayusername", credential: "efrelaypassword" },
         { urls: "turn:a.relay.metered.ca:80", username: "openrelayproject", credential: "openrelayproject" },
-        { urls: "turn:relay1.expressturn.com:3478", username: "efrelayusername", credential: "efrelaypassword" }
-      ],
-      iceTransportPolicy: "relay" // force relay-only for cross-network reliability
+        { urls: "turn:a.relay.metered.ca:443", username: "openrelayproject", credential: "openrelayproject" },
+      ]
     });
     peerConnections.current[remoteUserId] = pc;
 
+    // add local tracks
     if (localStreamRef.current) {
       localStreamRef.current.getTracks().forEach(track => {
         pc.addTrack(track, localStreamRef.current);
       });
     }
 
+    // send our ICE
     pc.onicecandidate = e => {
       if (e.candidate) {
-        console.log("Sending ICE candidate to:", remoteUserId);
+        // console.log("ICE candidate:", e.candidate.candidate);
         socketRef.current.emit("ice-candidate", { candidate: e.candidate, to: remoteUserId });
       }
     };
 
+    // attach remote
     pc.ontrack = e => {
-      console.log("Received remote track from:", remoteUserId);
-      const stream = e.streams[0];
-      if (stream) {
-        remoteStreams.current[remoteUserId] = stream;
-        const el = remoteVideoRefs.current[remoteUserId];
-        if (el) {
-          el.srcObject = stream;
-          el.play().catch(e => console.error("Error playing video:", e));
-        }
-      }
-    };
-
-    pc.oniceconnectionstatechange = () => {
-      console.log("ICE connection state for", remoteUserId, ":", pc.iceConnectionState);
-      if (pc.iceConnectionState === 'failed' || pc.iceConnectionState === 'disconnected') {
-        console.error("Connection failed/disconnected for", remoteUserId);
-        // Try to restart ICE
-        if (pc.iceConnectionState === 'failed') {
-          console.log("Attempting ICE restart for", remoteUserId);
-          pc.restartIce();
-        }
-      } else if (pc.iceConnectionState === 'connected') {
-        console.log("Successfully connected to", remoteUserId);
-        toast.success(`Connected to ${remoteUsers[remoteUserId] || 'user'}`, { autoClose: 2000 });
-      }
-    };
-
-    pc.onconnectionstatechange = () => {
-      console.log("Connection state for", remoteUserId, ":", pc.connectionState);
-    };
-
-    pc.onsignalingstatechange = () => {
-      console.log("Signaling state for", remoteUserId, ":", pc.signalingState);
+      const el = remoteVideoRefs.current[remoteUserId];
+      if (el) el.srcObject = e.streams[0];
     };
 
     return pc;
   };
 
+  // 2) on new peer:
   const handleUserJoined = async (remoteUserId) => {
-    if (!localStreamRef.current) {
-      console.error("No local stream available");
-      return;
-    }
-    try {
-      const pc = createPeerConnection(remoteUserId);
-      const offer = await pc.createOffer();
-      await pc.setLocalDescription(offer);
-      console.log("Sending offer to:", remoteUserId);
-      socketRef.current.emit("offer", { offer, to: remoteUserId });
-    } catch (err) {
-      console.error("Error in handleUserJoined:", err);
-    }
+    if (!localStreamRef.current) return;
+    const pc = createPeerConnection(remoteUserId);
+    const offer = await pc.createOffer();
+    await pc.setLocalDescription(offer);
+    socketRef.current.emit("offer", { offer, to: remoteUserId });
   };
 
+  // 3) on OFFER:
   const handleOffer = async ({ offer, from }) => {
-    console.log("Handling offer from:", from);
-    if (!localStreamRef.current) {
-      console.error("Cannot handle offer - no local stream");
-      return;
-    }
-    
+    if (!localStreamRef.current) return;
     const pc = createPeerConnection(from);
 
-    // If we already have a remote description, this is a glare condition
+    // if we've already got their SDP, don’t re-answer
     if (pc.remoteDescription) {
-      console.log("Already have remote description for", from, "- ignoring duplicate offer");
+      // console.log("⏩ already answered offer from", from);
       return;
-    }
-
-    // If we have a local description (we sent an offer), we need to handle glare
-    if (pc.localDescription) {
-      console.log("Glare detected with", from, "- comparing IDs");
-      // Use tie-breaker: lower userId accepts the offer, higher userId ignores it
-      if (userId < from) {
-        console.log("Our ID is lower - accepting offer and restarting");
-        await pc.setLocalDescription({ type: 'rollback' });
-      } else {
-        console.log("Our ID is higher - ignoring offer");
-        return;
-      }
     }
 
     try {
-      console.log("Setting remote description from offer");
-      await pc.setRemoteDescription(new window.RTCSessionDescription(offer));
-      
-      // Process queued ICE candidates
-      if (iceCandidateQueue.current[from]) {
-        console.log("Processing queued ICE candidates for:", from);
-        for (const candidate of iceCandidateQueue.current[from]) {
-          try {
-            await pc.addIceCandidate(new window.RTCIceCandidate(candidate));
-          } catch (e) {
-            console.error("Error adding queued ICE candidate:", e);
-          }
-        }
-        delete iceCandidateQueue.current[from];
-      }
-
-      console.log("Creating answer");
+      await pc.setRemoteDescription(new RTCSessionDescription(offer));
       const answer = await pc.createAnswer();
       await pc.setLocalDescription(answer);
-      
-      console.log("Sending answer to:", from);
       socketRef.current.emit("answer", { answer, to: from });
+      // console.log("✅ answered offer from", from);
     } catch (err) {
-      console.error("Error handling offer:", err);
+      console.error("❌ error handling offer:", err);
       pc.close();
       delete peerConnections.current[from];
     }
   };
 
+  // 4) on ANSWER:
   const handleAnswer = async ({ answer, from }) => {
-    console.log("Handling answer from:", from);
     const pc = peerConnections.current[from];
     if (!pc) {
-      console.error("No peer connection found for:", from);
+      // console.log("⏩ ignore answer, no pc for", from);
       return;
     }
-    
+    // only set once
     if (pc.remoteDescription) {
-      console.log("Already have remote description for", from, "- ignoring duplicate answer");
+      // console.log("⏩ remote already set for", from);
       return;
     }
-    
     try {
-      console.log("Setting remote description from answer");
-      await pc.setRemoteDescription(new window.RTCSessionDescription(answer));
-      console.log("Successfully set remote description for:", from);
-
-      // Process queued ICE candidates
-      if (iceCandidateQueue.current[from]) {
-        console.log("Processing queued ICE candidates for:", from);
-        for (const candidate of iceCandidateQueue.current[from]) {
-          try {
-            await pc.addIceCandidate(new window.RTCIceCandidate(candidate));
-          } catch (e) {
-            console.error("Error adding queued ICE candidate:", e);
-          }
-        }
-        delete iceCandidateQueue.current[from];
-      }
+      await pc.setRemoteDescription(new RTCSessionDescription(answer));
+      // console.log("✅ remote-answer set for", from);
     } catch (err) {
-      console.error("Failed to set remote answer:", err);
+      console.error("❌ failed to set remote answer:", err);
     }
   };
 
+  // 5) on ICE:
   const handleICECandidate = async ({ candidate, from }) => {
-    console.log("Handling ICE candidate from:", from);
     const pc = peerConnections.current[from];
-    if (!pc) {
-      console.error("No peer connection found for:", from);
-      return;
-    }
-    
-    if (!pc.remoteDescription) {
-      console.warn("Received ICE candidate before remote description - queueing");
-      if (!iceCandidateQueue.current[from]) {
-        iceCandidateQueue.current[from] = [];
-      }
-      iceCandidateQueue.current[from].push(candidate);
-      return;
-    }
-    
+    if (!pc) return;
     try {
-      await pc.addIceCandidate(new window.RTCIceCandidate(candidate));
-      console.log("Successfully added ICE candidate from:", from);
+      await pc.addIceCandidate(new RTCIceCandidate(candidate));
     } catch (e) {
-      console.error("Error adding ICE candidate:", e);
+      // console.warn("ICE add failed:", e);
     }
   };
 
