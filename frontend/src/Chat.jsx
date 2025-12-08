@@ -214,7 +214,7 @@ const Chat = () => {
         const validRemoteUsers = remoteUserIds.filter(id => id !== userId);
 
         validRemoteUsers.forEach(async (remoteUserId) => {
-          const pc = createPeerConnection(remoteUserId);
+          const pc = await createPeerConnection(remoteUserId);
           try {
             const offer = await pc.createOffer();
             await pc.setLocalDescription(offer);
@@ -255,46 +255,87 @@ const endVideoCall = () => {
   toast.info("Video call ended");
 };
 
-  const createPeerConnection = (remoteUserId) => {
-    if (peerConnections.current[remoteUserId]) {
-      return peerConnections.current[remoteUserId];
+// Add this new function before createPeerConnection
+const fetchTurnCredentials = async () => {
+  try {
+    const response = await fetch(
+      `https://workspaces.metered.live/api/v1/turn/credentials?apiKey=${import.meta.env.VITE_METERED_API_KEY}`
+    );
+    const iceServers = await response.json();
+    return iceServers;
+  } catch (error) {
+    console.error("Error fetching TURN credentials:", error);
+    // Fallback to static credentials
+    return [
+      {
+        urls: "stun:stun.l.google.com:19302",
+      },
+      {
+        urls: "stun:stun.relay.metered.ca:80",
+      },
+      {
+        urls: "turn:global.relay.metered.ca:80",
+        username: import.meta.env.VITE_TURN_USERNAME,
+        credential: import.meta.env.VITE_TURN_CREDENTIAL,
+      },
+      {
+        urls: "turn:global.relay.metered.ca:80?transport=tcp",
+        username: import.meta.env.VITE_TURN_USERNAME,
+        credential: import.meta.env.VITE_TURN_CREDENTIAL,
+      },
+      {
+        urls: "turn:global.relay.metered.ca:443",
+        username: import.meta.env.VITE_TURN_USERNAME,
+        credential: import.meta.env.VITE_TURN_CREDENTIAL,
+      },
+      {
+        urls: "turns:global.relay.metered.ca:443?transport=tcp",
+        username: import.meta.env.VITE_TURN_USERNAME,
+        credential: import.meta.env.VITE_TURN_CREDENTIAL,
+      },
+    ];
+  }
+};
+
+// Update createPeerConnection to be async
+const createPeerConnection = async (remoteUserId) => {
+  if (peerConnections.current[remoteUserId]) {
+    return peerConnections.current[remoteUserId];
+  }
+
+  // Fetch fresh TURN credentials
+  const iceServers = await fetchTurnCredentials();
+  
+  const pc = new RTCPeerConnection({ iceServers });
+  
+  peerConnections.current[remoteUserId] = pc;
+
+  // Add local tracks
+  localStreamRef.current.getTracks().forEach(track => {
+    pc.addTrack(track, localStreamRef.current);
+  });
+
+  // Send our ICE candidates
+  pc.onicecandidate = e => {
+    if (e.candidate) {
+      socketRef.current.emit("ice-candidate", { candidate: e.candidate, to: remoteUserId });
     }
-    const pc = new RTCPeerConnection({
-      iceServers: [
-        { urls: "stun:stun.l.google.com:19302" },
-        { urls: "turn:relay1.expressturn.com:3478", username: "efrelayusername", credential: "efrelaypassword" },
-        { urls: "turn:a.relay.metered.ca:80", username: "openrelayproject", credential: "openrelayproject" },
-        { urls: "turn:a.relay.metered.ca:443", username: "openrelayproject", credential: "openrelayproject" },
-      ]
-    });
-    peerConnections.current[remoteUserId] = pc;
-
-    // add local tracks
-    localStreamRef.current.getTracks().forEach(track => {
-      pc.addTrack(track, localStreamRef.current);
-    });
-
-    // send our ICE
-    pc.onicecandidate = e => {
-      if (e.candidate) {
-        socketRef.current.emit("ice-candidate", { candidate: e.candidate, to: remoteUserId });
-      }
-    };
-
-    // attach remote stream
-    pc.ontrack = e => {
-      const el = remoteVideoRefs.current[remoteUserId];
-      if (el) {
-        el.srcObject = e.streams[0];
-      }
-    };
-
-    return pc;
   };
+
+  // Attach remote stream
+  pc.ontrack = e => {
+    const el = remoteVideoRefs.current[remoteUserId];
+    if (el) {
+      el.srcObject = e.streams[0];
+    }
+  };
+
+  return pc;
+};
 
   const handleUserJoined = async (remoteUserId) => {
     if (!localStreamRef.current) return;
-    const pc = createPeerConnection(remoteUserId);
+    const pc = await createPeerConnection(remoteUserId);
     const offer = await pc.createOffer();
     await pc.setLocalDescription(offer);
     socketRef.current.emit("offer", { offer, to: remoteUserId });
@@ -302,7 +343,7 @@ const endVideoCall = () => {
 
 const handleOffer = async ({ offer, from }) => {
   if (!localStreamRef.current) return;
-  const pc = createPeerConnection(from);
+  const pc = await createPeerConnection(from);
 
   if (pc.remoteDescription) {
     return;
