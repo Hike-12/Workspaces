@@ -214,7 +214,7 @@ const Chat = () => {
         const validRemoteUsers = remoteUserIds.filter(id => id !== userId);
 
         validRemoteUsers.forEach(async (remoteUserId) => {
-          const pc = await createPeerConnection(remoteUserId);
+          const pc = createPeerConnection(remoteUserId);
           try {
             const offer = await pc.createOffer();
             await pc.setLocalDescription(offer);
@@ -255,18 +255,13 @@ const endVideoCall = () => {
   toast.info("Video call ended");
 };
 
-// Add this new function before createPeerConnection
-const fetchTurnCredentials = async () => {
-  try {
-    const response = await fetch(
-      `https://workspaces.metered.live/api/v1/turn/credentials?apiKey=${import.meta.env.VITE_METERED_API_KEY}`
-    );
-    const iceServers = await response.json();
-    return iceServers;
-  } catch (error) {
-    console.error("Error fetching TURN credentials:", error);
-    // Fallback to static credentials
-    return [
+const createPeerConnection = (remoteUserId) => {
+  if (peerConnections.current[remoteUserId]) {
+    return peerConnections.current[remoteUserId];
+  }
+  
+  const pc = new RTCPeerConnection({
+    iceServers: [
       {
         urls: "stun:stun.l.google.com:19302",
       },
@@ -293,20 +288,8 @@ const fetchTurnCredentials = async () => {
         username: import.meta.env.VITE_TURN_USERNAME,
         credential: import.meta.env.VITE_TURN_CREDENTIAL,
       },
-    ];
-  }
-};
-
-// Update createPeerConnection to be async
-const createPeerConnection = async (remoteUserId) => {
-  if (peerConnections.current[remoteUserId]) {
-    return peerConnections.current[remoteUserId];
-  }
-
-  // Fetch fresh TURN credentials
-  const iceServers = await fetchTurnCredentials();
-  
-  const pc = new RTCPeerConnection({ iceServers });
+    ]
+  });
   
   peerConnections.current[remoteUserId] = pc;
 
@@ -330,12 +313,17 @@ const createPeerConnection = async (remoteUserId) => {
     }
   };
 
+  // 🔍 Debug logs (optional - remove in production)
+  pc.oniceconnectionstatechange = () => {
+    console.log(`ICE State [${remoteUserId}]:`, pc.iceConnectionState);
+  };
+
   return pc;
 };
 
   const handleUserJoined = async (remoteUserId) => {
     if (!localStreamRef.current) return;
-    const pc = await createPeerConnection(remoteUserId);
+    const pc = createPeerConnection(remoteUserId);
     const offer = await pc.createOffer();
     await pc.setLocalDescription(offer);
     socketRef.current.emit("offer", { offer, to: remoteUserId });
@@ -343,7 +331,7 @@ const createPeerConnection = async (remoteUserId) => {
 
 const handleOffer = async ({ offer, from }) => {
   if (!localStreamRef.current) return;
-  const pc = await createPeerConnection(from);
+  const pc = createPeerConnection(from);
 
   if (pc.remoteDescription) {
     return;
