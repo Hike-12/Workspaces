@@ -300,28 +300,50 @@ const endVideoCall = () => {
     socketRef.current.emit("offer", { offer, to: remoteUserId });
   };
 
-  const handleOffer = async ({ offer, from }) => {
-    if (!isVideoCallActiveRef.current) return;
-    const pc = createPeerConnection(from);
+const handleOffer = async ({ offer, from }) => {
+  if (!localStreamRef.current) return;
+  const pc = createPeerConnection(from);
+
+  if (pc.remoteDescription) {
+    return;
+  }
+
+  try {
     await pc.setRemoteDescription(new RTCSessionDescription(offer));
     const answer = await pc.createAnswer();
     await pc.setLocalDescription(answer);
     socketRef.current.emit("answer", { answer, to: from });
-  };
+  } catch (err) {
+    console.error("error handling offer:", err);
+    pc.close();
+    delete peerConnections.current[from];
+  }
+};
 
-  const handleAnswer = async ({ answer, from }) => {
-    const pc = peerConnections.current[from];
-    if (pc) {
-      await pc.setRemoteDescription(new RTCSessionDescription(answer));
-    }
-  };
+const handleAnswer = async ({ answer, from }) => {
+  const pc = peerConnections.current[from];
+  if (!pc) {
+    return;
+  }
+  if (pc.remoteDescription) {
+    return;
+  }
+  try {
+    await pc.setRemoteDescription(new RTCSessionDescription(answer));
+  } catch (err) {
+    console.error("failed to set remote answer:", err);
+  }
+};
 
-  const handleICECandidate = async ({ candidate, from }) => {
-    const pc = peerConnections.current[from];
-    if (pc && pc.remoteDescription) {
-      await pc.addIceCandidate(new RTCIceCandidate(candidate));
-    }
-  };
+const handleICECandidate = async ({ candidate, from }) => {
+  const pc = peerConnections.current[from];
+  if (!pc) return;
+  try {
+    await pc.addIceCandidate(new RTCIceCandidate(candidate));
+  } catch (e) {
+    // ignore ICE errors
+  }
+};
 
   const toggleCamera = () => {
     if (!localStreamRef.current) return;
