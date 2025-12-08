@@ -293,29 +293,40 @@ const createPeerConnection = (remoteUserId) => {
   
   peerConnections.current[remoteUserId] = pc;
 
-  // Add local tracks
+  // 🔍 CRITICAL DEBUG - Check what's happening
+  pc.onicecandidate = e => {
+    if (e.candidate) {
+      console.log(`🧊 ICE Candidate [${remoteUserId}]:`, {
+        type: e.candidate.type,  // Should see "relay" for TURN
+        protocol: e.candidate.protocol,
+        address: e.candidate.address
+      });
+      socketRef.current.emit("ice-candidate", { candidate: e.candidate, to: remoteUserId });
+    } else {
+      console.log(`✅ ICE Gathering Complete [${remoteUserId}]`);
+    }
+  };
+
+  pc.oniceconnectionstatechange = () => {
+    console.log(`🔌 ICE Connection State [${remoteUserId}]:`, pc.iceConnectionState);
+    if (pc.iceConnectionState === 'failed') {
+      console.error(`❌ ICE Failed for ${remoteUserId} - TURN servers not working!`);
+    }
+  };
+
+  pc.onconnectionstatechange = () => {
+    console.log(`📡 Connection State [${remoteUserId}]:`, pc.connectionState);
+  };
+
   localStreamRef.current.getTracks().forEach(track => {
     pc.addTrack(track, localStreamRef.current);
   });
 
-  // Send our ICE candidates
-  pc.onicecandidate = e => {
-    if (e.candidate) {
-      socketRef.current.emit("ice-candidate", { candidate: e.candidate, to: remoteUserId });
-    }
-  };
-
-  // Attach remote stream
   pc.ontrack = e => {
     const el = remoteVideoRefs.current[remoteUserId];
     if (el) {
       el.srcObject = e.streams[0];
     }
-  };
-
-  // 🔍 Debug logs (optional - remove in production)
-  pc.oniceconnectionstatechange = () => {
-    console.log(`ICE State [${remoteUserId}]:`, pc.iceConnectionState);
   };
 
   return pc;
